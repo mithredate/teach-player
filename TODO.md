@@ -11,7 +11,7 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
 
 ## Notes / loose ends
 
-- Claude Code's "text copied to clipboard" indicator does not appear in the web terminal (its OSC 52 clipboard writes are ignored without `@xterm/addon-clipboard`). Select-to-copy and right-click paste work; not a blocker. Revisit if agent-initiated copy matters — the addon is one exact-pinned dep away.
+- Agent-initiated clipboard (OSC 52) added 2026-08-20 via `@xterm/addon-clipboard` 0.2.0 — needs a manual check that Claude Code's copy now lands in the clipboard. Known harmless overlap: selecting in the TUI may write the clipboard twice (our select-handler + the agent's OSC 52 write).
 - `pnpm build` is esbuild only. `tsc` cannot typecheck the server without `@types/node` and `@types/ws`, which step 2 did not add (frozen deps). Add both as devDeps plus `allowImportingTsExtensions` to get typechecking back — or drop the unused `typescript` devDep.
 - `pnpm install` needs a `postinstall` chmod: pnpm strips the exec bit from node-pty's prebuilt `spawn-helper` (ADR 0013). README contributor note still pending (step 6).
 - Acceptance still manual: real `claude` session in a browser (plan mode, colors, resize artifacts), `claude --resume` picker, and the xterm client itself. Chrome automation is blocked by org policy on this machine, so nothing verified the client end to end yet.

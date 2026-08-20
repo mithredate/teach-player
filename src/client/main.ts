@@ -1,3 +1,4 @@
+import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -5,6 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 const terminal = new Terminal({ cursorBlink: true, fontSize: 14, theme: { background: "#1e1e1e" } });
 const fit = new FitAddon();
 terminal.loadAddon(fit);
+terminal.loadAddon(new ClipboardAddon()); // OSC 52: lets the agent itself write the clipboard ("text copied")
 terminal.open(document.getElementById("terminal")!);
 fit.fit();
 
