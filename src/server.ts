@@ -2,10 +2,11 @@
 import { spawn as spawnOpener } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
-import { join, resolve } from "node:path";
+import { extname, join, resolve } from "node:path";
 import { spawn } from "node-pty";
 import { WebSocket, WebSocketServer } from "ws";
 import { createReplayBuffer } from "./replay-buffer.ts";
+import { listLessons, resolveWorkspacePath } from "./workspace.ts";
 
 const PORT = 7529; // ADR 0006: spells PLAY, loopback only, no --port flag
 const REPLAY_BYTES = 200 * 1024; // ADR 0003
@@ -38,9 +39,54 @@ const shell: Record<string, [file: string, mime: string] | undefined> = {
   "/": ["index.html", "text/html; charset=utf-8"],
   "/main.js": ["main.js", "text/javascript"],
   "/main.css": ["main.css", "text/css"],
+  "/teach-bridge.js": ["teach-bridge.js", "text/javascript"],
+};
+// Step 3: content pane. Extension whitelist only — anything else is octet-stream.
+const WORKSPACE_MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".htm": "text/html; charset=utf-8",
+  ".js": "text/javascript",
+  ".css": "text/css",
+  ".json": "application/json",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".woff2": "font/woff2",
+  ".webp": "image/webp",
 };
 const http = createServer((request, response) => {
-  const served = shell[request.url ?? "/"];
+  const url = (request.url ?? "/").split("?")[0]; // lessons may cache-bust assets (style.css?v=2)
+
+  if (url === "/api/files") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify(listLessons(workspace)));
+    return;
+  }
+
+  if (url.startsWith("/workspace/")) {
+    const resolved = resolveWorkspacePath(workspace, url.slice("/workspace/".length));
+    if (!resolved) {
+      response.writeHead(404).end(); // same 404 as an unknown route — don't leak why
+      return;
+    }
+    let body: Buffer;
+    try {
+      body = readFileSync(resolved);
+    } catch {
+      response.writeHead(404).end();
+      return;
+    }
+    const ext = extname(resolved).toLowerCase();
+    // ADR 0005: the server injects the bridge into every HTML page it serves.
+    const html = ext === ".html" || ext === ".htm";
+    response.writeHead(200, { "content-type": WORKSPACE_MIME[ext] ?? "application/octet-stream" });
+    response.end(html ? Buffer.concat([body, Buffer.from('<script src="/teach-bridge.js"></script>')]) : body);
+    return;
+  }
+
+  const served = shell[url];
   if (!served) {
     response.writeHead(404).end();
     return;

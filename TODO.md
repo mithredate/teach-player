@@ -12,7 +12,7 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
 ## Notes / loose ends
 
 - Agent-initiated clipboard (OSC 52) added 2026-08-20 via `@xterm/addon-clipboard` 0.2.0 — needs a manual check that Claude Code's copy now lands in the clipboard. Known harmless overlap: selecting in the TUI may write the clipboard twice (our select-handler + the agent's OSC 52 write).
-- `pnpm build` is esbuild only. `tsc` cannot typecheck the server without `@types/node` and `@types/ws`, which step 2 did not add (frozen deps). Add both as devDeps plus `allowImportingTsExtensions` to get typechecking back — or drop the unused `typescript` devDep.
+- Typechecking restored 2026-08-20 (ADR 0014, orchestrator repo): `tsc --noEmit` runs inside `pnpm test`; `@types/node` pinned to the 22.x line to match the engine floor.
 - `pnpm install` needs a `postinstall` chmod: pnpm strips the exec bit from node-pty's prebuilt `spawn-helper` (ADR 0013). README contributor note still pending (step 6).
 - Acceptance still manual: real `claude` session in a browser (plan mode, colors, resize artifacts), `claude --resume` picker, and the xterm client itself. Chrome automation is blocked by org policy on this machine, so nothing verified the client end to end yet.
 - Resize control frames have no automated test (manual tier per ADR 0010). The fake agent could report `process.stdout.columns` on demand if that changes.
