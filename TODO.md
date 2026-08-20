@@ -4,7 +4,7 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
 
 - [x] **Step 1 — Scaffold** (done 2026-08-20): package.json (bin, engines >=22, exact pins), pnpm-workspace.yaml (ADR 0009), tsconfig, MIT license, README stub, CI workflow
 - [x] **Step 2 — Terminal-only milestone** (done 2026-08-20): PTY spawn with `[command…]` passthrough (ADR 0007), ws on 127.0.0.1:7529 (ADR 0006), replay buffer (ADR 0003), takeover (ADR 0002), xterm.js client
-- [ ] **Step 3 — Content pane**: static serving + traversal guard, `sandbox="allow-scripts"`, bridge-script injection (ADR 0005), `/api/files`, picker
+- [x] **Step 3 — Content pane** (done 2026-08-20): static serving + traversal guard, `sandbox="allow-scripts"`, bridge-script injection (ADR 0005), `/api/files`, picker
 - [ ] **Step 4 — Watcher**: recursive fs.watch → fsevent frames, iframe auto-reload, picker refresh
 - [ ] **Step 5 — The bridge**: whitelist sanitizer + `[lesson]` prefix (ADR 0005, TDD), send-selection via injected helper
 - [ ] **Step 6 — Polish + publish**: README (GIF, security sentence, node-gyp note, npx), error paths, npm trusted publishing with provenance (ADR 0011)
@@ -15,5 +15,7 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
 - Typechecking restored 2026-08-20 (ADR 0014, orchestrator repo): `tsc --noEmit` runs inside `pnpm test`; `@types/node` pinned to the 22.x line to match the engine floor.
 - `pnpm install` needs a `postinstall` chmod: pnpm strips the exec bit from node-pty's prebuilt `spawn-helper` (ADR 0013). README contributor note still pending (step 6).
 - Acceptance still manual: real `claude` session in a browser (plan mode, colors, resize artifacts), `claude --resume` picker, and the xterm client itself. Chrome automation is blocked by org policy on this machine, so nothing verified the client end to end yet.
+- Step 3 manual acceptance pending (Mehrdad): open the German-B1 workspace, check `mock/ut1.html` renders with its `../assets/` styles and the self-grading quiz working inside the sandboxed iframe, picker defaults to newest. Note: `sandbox="allow-scripts"` lessons lose localStorage/cookies by design (ADR 0005).
 - Resize control frames have no automated test (manual tier per ADR 0010). The fake agent could report `process.stdout.columns` on demand if that changes.
 - Step 3 adds real routes; the server's whitelist map (`/`, `/main.js`, `/main.css`) is where they go.
+- `listLessons` uses bare `statSync`: a broken symlink in the workspace throws inside the request handler and kills the server. Fold into step 6 (error paths) — a try/continue in the walk.

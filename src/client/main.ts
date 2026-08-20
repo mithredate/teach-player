@@ -40,3 +40,19 @@ terminal.onResize(({ cols, rows }) =>
   socket.readyState === WebSocket.OPEN && socket.send(JSON.stringify({ type: "resize", cols, rows })),
 );
 addEventListener("resize", () => fit.fit());
+
+// Step 3: content pane — picker lists workspace lessons, newest first; iframe shows the pick.
+const picker = document.getElementById("picker") as HTMLSelectElement;
+const content = document.getElementById("content") as HTMLIFrameElement;
+fetch("/api/files")
+  .then((response) => response.json())
+  .then((paths: string[]) => {
+    if (paths.length === 0) {
+      picker.add(new Option("no lessons yet", "", true, true));
+      picker.options[0].disabled = true;
+      return;
+    }
+    for (const path of paths) picker.add(new Option(path, path));
+    content.src = `/workspace/${encodeURI(paths[0])}`;
+  });
+picker.addEventListener("change", () => (content.src = `/workspace/${encodeURI(picker.value)}`));

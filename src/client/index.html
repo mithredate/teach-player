@@ -11,7 +11,31 @@
         height: 100%;
         background: #1e1e1e;
       }
+      body {
+        display: flex;
+      }
+      #content-pane {
+        display: flex;
+        flex-direction: column;
+        width: 50%;
+        height: 100%;
+      }
+      #picker {
+        flex: none;
+        padding: 4px;
+        background: #252526;
+        color: #ccc;
+        border: none;
+        border-bottom: 1px solid #333;
+      }
+      #content {
+        flex: 1;
+        width: 100%;
+        border: none;
+        background: #fff;
+      }
       #terminal {
+        width: 50%;
         height: 100%;
         padding: 4px;
       }
@@ -19,6 +43,10 @@
     <script type="module" src="/main.js"></script>
   </head>
   <body>
+    <div id="content-pane">
+      <select id="picker"></select>
+      <iframe id="content" sandbox="allow-scripts"></iframe>
+    </div>
     <div id="terminal"></div>
   </body>
 </html>
