@@ -22,6 +22,17 @@ socket.onmessage = (event) =>
     : terminal.write(new Uint8Array(event.data));
 socket.onclose = () => notice("disconnected — reload this page to take over");
 
+// Terminal parity: selecting copies, right-click pastes (127.0.0.1 is a secure context,
+// so navigator.clipboard is available; Chrome asks once before the first clipboard read).
+terminal.onSelectionChange(() => {
+  const selection = terminal.getSelection();
+  if (selection) navigator.clipboard.writeText(selection).catch(() => {});
+});
+document.getElementById("terminal")!.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  navigator.clipboard.readText().then((text) => text && terminal.paste(text), () => {});
+});
+
 terminal.onData((data) => socket.readyState === WebSocket.OPEN && socket.send(new TextEncoder().encode(data)));
 terminal.onResize(({ cols, rows }) =>
   socket.readyState === WebSocket.OPEN && socket.send(JSON.stringify({ type: "resize", cols, rows })),
