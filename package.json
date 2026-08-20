@@ -14,7 +14,7 @@
   "scripts": {
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
     "build": "esbuild src/server.ts --bundle --packages=external --platform=node --format=esm --outfile=dist/server.js && esbuild src/client/main.ts --bundle --format=esm --outdir=dist && cp src/client/index.html dist/",
-    "test": "pnpm build && node --test \"test/**/*.test.js\""
+    "test": "pnpm build && tsc && node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "@xterm/addon-clipboard": "0.2.0",
@@ -24,6 +24,8 @@
     "ws": "8.21.3"
   },
   "devDependencies": {
+    "@types/node": "22.20.1",
+    "@types/ws": "8.18.1",
     "esbuild": "0.28.2",
     "typescript": "7.0.2"
   }

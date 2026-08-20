@@ -34,7 +34,7 @@ const pty = spawn(agent, agentArgs, {
 const replay = createReplayBuffer(REPLAY_BYTES);
 let client: WebSocket | null = null;
 
-const shell = {
+const shell: Record<string, [file: string, mime: string] | undefined> = {
   "/": ["index.html", "text/html; charset=utf-8"],
   "/main.js": ["main.js", "text/javascript"],
   "/main.css": ["main.css", "text/css"],
@@ -50,7 +50,7 @@ const http = createServer((request, response) => {
 });
 
 // Registered before the WebSocketServer, which re-emits http errors as its own and would throw first.
-http.on("error", (error) =>
+http.on("error", (error: NodeJS.ErrnoException) =>
   fail(error.code === "EADDRINUSE" ? `port ${PORT} in use — is another teach-player running?` : error.message),
 );
 
@@ -73,7 +73,7 @@ wss.on("connection", (socket) => {
   socket.on("message", (data, isBinary) => {
     if (socket !== client) return;
     if (isBinary) {
-      pty.write(data);
+      pty.write(data as Buffer);
       return;
     }
     let control;
@@ -92,7 +92,8 @@ wss.on("connection", (socket) => {
 });
 
 pty.onData((chunk) => {
-  replay.add(chunk);
+  // encoding:null makes node-pty emit Buffers, but its types still say string.
+  replay.add(chunk as unknown as Buffer);
   if (client?.readyState === WebSocket.OPEN) client.send(chunk, { binary: true });
 });
 
