@@ -1,0 +1,7 @@
+# Supply-chain posture (ADR 0009): exact pins, release-age gate, build-script allowlist.
+savePrefix: ''
+minimumReleaseAge: 10080 # 7 days, in minutes
+strictDepBuilds: true
+allowBuilds:
+  esbuild: true
+  node-pty: true

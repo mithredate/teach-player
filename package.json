@@ -1,0 +1,28 @@
+{
+  "name": "teach-player",
+  "version": "0.0.0",
+  "description": "Watch and interact with an AI coding-agent teaching session in the browser: live terminal next to the lesson content it writes.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "teach-player": "dist/server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.13.1",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "node-pty": "1.1.0",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}
