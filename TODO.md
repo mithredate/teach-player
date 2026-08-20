@@ -3,7 +3,7 @@
 Progress tracker — the *only* place state lives. Detail stays in the orchestrator repo: `docs/05-build-plan.md` and `docs/adr/`. Check items off as they finish; record loose ends under Notes.
 
 - [x] **Step 1 — Scaffold** (done 2026-08-20): package.json (bin, engines >=22, exact pins), pnpm-workspace.yaml (ADR 0009), tsconfig, MIT license, README stub, CI workflow
-- [ ] **Step 2 — Terminal-only milestone**: PTY spawn with `[command…]` passthrough (ADR 0007), ws on 127.0.0.1:7529 (ADR 0006), replay buffer (ADR 0003), takeover (ADR 0002), xterm.js client
+- [x] **Step 2 — Terminal-only milestone** (done 2026-08-20): PTY spawn with `[command…]` passthrough (ADR 0007), ws on 127.0.0.1:7529 (ADR 0006), replay buffer (ADR 0003), takeover (ADR 0002), xterm.js client
 - [ ] **Step 3 — Content pane**: static serving + traversal guard, `sandbox="allow-scripts"`, bridge-script injection (ADR 0005), `/api/files`, picker
 - [ ] **Step 4 — Watcher**: recursive fs.watch → fsevent frames, iframe auto-reload, picker refresh
 - [ ] **Step 5 — The bridge**: whitelist sanitizer + `[lesson]` prefix (ADR 0005, TDD), send-selection via injected helper
@@ -11,6 +11,9 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
 
 ## Notes / loose ends
 
-- `src/server.ts` is a stub so `pnpm build` has real input; step 2 replaces it.
-- `test/smoke.test.js` only guards manifest invariants; real test tiers (unit/integration/functional dirs) arrive with step 2.
 - No GitHub remote yet — create the public repo and push when ready.
+- `pnpm build` is esbuild only. `tsc` cannot typecheck the server without `@types/node` and `@types/ws`, which step 2 did not add (frozen deps). Add both as devDeps plus `allowImportingTsExtensions` to get typechecking back — or drop the unused `typescript` devDep.
+- `pnpm install` needs a `postinstall` chmod: pnpm strips the exec bit from node-pty's prebuilt `spawn-helper` (ADR 0013). README contributor note still pending (step 6).
+- Acceptance still manual: real `claude` session in a browser (plan mode, colors, resize artifacts), `claude --resume` picker, and the xterm client itself. Chrome automation is blocked by org policy on this machine, so nothing verified the client end to end yet.
+- Resize control frames have no automated test (manual tier per ADR 0010). The fake agent could report `process.stdout.columns` on demand if that changes.
+- Step 3 adds real routes; the server's whitelist map (`/`, `/main.js`, `/main.css`) is where they go.

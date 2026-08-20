@@ -11,7 +11,7 @@ Public repo. Plans and ADRs live in the private `teach-player-orchestrator` repo
 - Deps: exact pins via pnpm, verify latest stable against the registry first (ADR 0009). Security: whitelist over blacklist.
 - Agent-agnostic: `claude` is the default command, Codex must work identically (ADR 0007).
 - Commit per build step, conventional commits, clean history — this repo goes public.
-- Delegate tasks to Opus or Sonnet agents when possible to keep Fable quota.
+- Delegate coding tasks to subagents to keep Fable quota: Sonnet for well-specified implementation, Opus only for design-heavy work, Haiku for chores. One focused unit per agent (a module + its tests), never a whole milestone; put ponytail limits in the prompt. The orchestrator reviews every result for correctness and over-engineering before committing.
 - On every modification here: document the change in the orchestrator repo, commit, and push both repos.
 
 ## Communication
