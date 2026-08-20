@@ -5,7 +5,7 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
 - [x] **Step 1 — Scaffold** (done 2026-08-20): package.json (bin, engines >=22, exact pins), pnpm-workspace.yaml (ADR 0009), tsconfig, MIT license, README stub, CI workflow
 - [x] **Step 2 — Terminal-only milestone** (done 2026-08-20): PTY spawn with `[command…]` passthrough (ADR 0007), ws on 127.0.0.1:7529 (ADR 0006), replay buffer (ADR 0003), takeover (ADR 0002), xterm.js client
 - [x] **Step 3 — Content pane** (done 2026-08-20): static serving + traversal guard, `sandbox="allow-scripts"`, bridge-script injection (ADR 0005), `/api/files`, picker
-- [ ] **Step 4 — Watcher**: recursive fs.watch → fsevent frames, iframe auto-reload, picker refresh
+- [x] **Step 4 — Watcher** (done 2026-08-20): recursive fs.watch → debounced fsevent frames, iframe auto-reload (cache-busted), picker refresh with "● " badge on new files
 - [ ] **Step 5 — The bridge**: whitelist sanitizer + `[lesson]` prefix (ADR 0005, TDD), send-selection via injected helper
 - [ ] **Step 6 — Polish + publish**: README (GIF, security sentence, node-gyp note, npx), error paths, npm trusted publishing with provenance (ADR 0011)
 

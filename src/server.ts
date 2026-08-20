@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { spawn as spawnOpener } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, watch } from "node:fs";
 import { createServer } from "node:http";
-import { extname, join, resolve } from "node:path";
+import { extname, join, resolve, sep } from "node:path";
 import { spawn } from "node-pty";
 import { WebSocket, WebSocketServer } from "ws";
 import { createReplayBuffer } from "./replay-buffer.ts";
@@ -135,6 +135,22 @@ wss.on("connection", (socket) => {
   socket.on("close", () => {
     if (socket === client) client = null;
   });
+});
+
+// Step 4: watch the workspace so the browser can react to edits (Node >=22: recursive
+// works on every platform, so no chokidar). Debounced: one frame per changed path per burst.
+const pendingPaths = new Set<string>();
+let flush: NodeJS.Timeout | null = null;
+watch(workspace, { recursive: true }, (_event, filename) => {
+  if (!filename) return;
+  const path = filename.split(sep).join("/");
+  if (path.split("/").some((segment) => segment === ".git" || segment === "node_modules")) return;
+  pendingPaths.add(path);
+  flush ??= setTimeout(() => {
+    flush = null;
+    for (const path of pendingPaths) if (client?.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type: "fsevent", path }));
+    pendingPaths.clear();
+  }, 100);
 });
 
 pty.onData((chunk) => {

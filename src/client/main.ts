@@ -18,10 +18,15 @@ socket.onopen = () => {
   fit.fit();
   socket.send(JSON.stringify({ type: "resize", cols: terminal.cols, rows: terminal.rows }));
 };
-socket.onmessage = (event) =>
-  typeof event.data === "string"
-    ? notice(JSON.parse(event.data).text)
-    : terminal.write(new Uint8Array(event.data));
+socket.onmessage = (event) => {
+  if (typeof event.data !== "string") return void terminal.write(new Uint8Array(event.data));
+  const message = JSON.parse(event.data);
+  if (message.type === "notice") notice(message.text);
+  else if (message.type === "fsevent")
+    message.path === picker.value
+      ? (content.src = `/workspace/${encodeURI(picker.value)}?v=${Date.now()}`)
+      : fetchFiles().then((paths) => renderPicker(paths, picker.value));
+};
 socket.onclose = () => notice("disconnected — reload this page to take over");
 
 // Terminal parity: selecting copies, right-click pastes (127.0.0.1 is a secure context,
@@ -44,15 +49,29 @@ addEventListener("resize", () => fit.fit());
 // Step 3: content pane — picker lists workspace lessons, newest first; iframe shows the pick.
 const picker = document.getElementById("picker") as HTMLSelectElement;
 const content = document.getElementById("content") as HTMLIFrameElement;
-fetch("/api/files")
-  .then((response) => response.json())
-  .then((paths: string[]) => {
-    if (paths.length === 0) {
-      picker.add(new Option("no lessons yet", "", true, true));
-      picker.options[0].disabled = true;
-      return;
-    }
-    for (const path of paths) picker.add(new Option(path, path));
-    content.src = `/workspace/${encodeURI(paths[0])}`;
-  });
-picker.addEventListener("change", () => (content.src = `/workspace/${encodeURI(picker.value)}`));
+
+const fetchFiles = (): Promise<string[]> => fetch("/api/files").then((response) => response.json());
+
+// Step 4: rebuilding on an fsevent needs to know which paths were already listed, to badge only the new one.
+let knownFiles = new Set<string>();
+function renderPicker(paths: string[], selected: string) {
+  picker.replaceChildren();
+  if (paths.length === 0) {
+    picker.add(new Option("no lessons yet", "", true, true));
+    picker.options[0].disabled = true;
+  } else {
+    paths.forEach((path, i) => picker.add(new Option(i === 0 && !knownFiles.has(path) ? `● ${path}` : path, path)));
+    picker.value = selected;
+  }
+  knownFiles = new Set(paths);
+}
+
+fetchFiles().then((paths) => {
+  knownFiles = new Set(paths); // nothing is "new" on first load — no badge
+  renderPicker(paths, paths[0] ?? "");
+  if (paths.length) content.src = `/workspace/${encodeURI(paths[0])}`;
+});
+picker.addEventListener("change", () => {
+  picker.selectedOptions[0].text = picker.value; // clear the "new" badge once picked
+  content.src = `/workspace/${encodeURI(picker.value)}`;
+});
