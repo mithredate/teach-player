@@ -2,7 +2,7 @@
 import { spawn as spawnOpener } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawn } from "node-pty";
 import { WebSocket, WebSocketServer } from "ws";
 import { createReplayBuffer } from "./replay-buffer.ts";
@@ -15,9 +15,11 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-const [workspace, ...command] = process.argv.slice(2);
-if (!workspace) fail("usage: teach-player <workspace> [command…]");
-if (!statSync(workspace, { throwIfNoEntry: false })?.isDirectory()) fail(`not a directory: ${workspace}`);
+// ADR 0007 (amended): first arg is always the workspace when present; bare launch = cwd.
+const [workspaceArg = ".", ...command] = process.argv.slice(2);
+const workspace = resolve(workspaceArg);
+if (!statSync(workspace, { throwIfNoEntry: false })?.isDirectory())
+  fail(`not a directory: ${workspace}\nusage: teach-player [workspace] [command…]  (defaults: current directory, claude)`);
 
 // ADR 0007: everything after the workspace is the agent command, handed to the PTY verbatim.
 const [agent = "claude", ...agentArgs] = command;

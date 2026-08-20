@@ -7,10 +7,10 @@ Watch an AI coding agent teach, in your browser. One pane shows the live agent t
 ## Planned quickstart
 
 ```sh
-npx teach-player <workspace-dir> [agent-command...]
+npx teach-player [workspace-dir] [agent-command...]
 ```
 
-The agent command defaults to `claude`. Any agent CLI works the same way.
+The workspace defaults to the current directory. The agent command defaults to `claude`; any agent CLI works the same way (`npx teach-player ~/german codex`). To run a different agent in the current directory, pass `.` as the workspace: `npx teach-player . codex`.
 
 **Note:** the first install compiles a native module (`node-pty`). You need Xcode Command Line Tools on macOS, or `build-essential` on Linux.
 
