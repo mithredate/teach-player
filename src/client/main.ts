@@ -75,3 +75,17 @@ picker.addEventListener("change", () => {
   picker.selectedOptions[0].text = picker.value; // clear the "new" badge once picked
   content.src = `/workspace/${encodeURI(picker.value)}`;
 });
+
+// Step 5: the bridge (ADR 0005). Only messages from the content iframe, shaped like an
+// inject, are forwarded — the server's sanitizer is the real defense, this is tidiness.
+addEventListener("message", (event) => {
+  if (event.source !== content.contentWindow) return;
+  const { type, text } = event.data ?? {};
+  if (type === "inject" && typeof text === "string" && text && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: "inject", text }));
+  }
+});
+
+document.getElementById("send-selection")!.addEventListener("click", () => {
+  content.contentWindow?.postMessage({ type: "get-selection" }, "*");
+});

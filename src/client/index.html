@@ -20,13 +20,27 @@
         width: 50%;
         height: 100%;
       }
-      #picker {
+      #picker-bar {
         flex: none;
+        display: flex;
+        background: #252526;
+        border-bottom: 1px solid #333;
+      }
+      #picker {
+        flex: 1;
         padding: 4px;
         background: #252526;
         color: #ccc;
         border: none;
-        border-bottom: 1px solid #333;
+      }
+      #send-selection {
+        flex: none;
+        padding: 4px 8px;
+        background: #252526;
+        color: #ccc;
+        border: none;
+        border-left: 1px solid #333;
+        cursor: pointer;
       }
       #content {
         flex: 1;
@@ -44,7 +58,10 @@
   </head>
   <body>
     <div id="content-pane">
-      <select id="picker"></select>
+      <div id="picker-bar">
+        <select id="picker"></select>
+        <button id="send-selection">Send selection</button>
+      </div>
       <iframe id="content" sandbox="allow-scripts"></iframe>
     </div>
     <div id="terminal"></div>

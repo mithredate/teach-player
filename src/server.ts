@@ -6,6 +6,7 @@ import { extname, join, resolve, sep } from "node:path";
 import { spawn } from "node-pty";
 import { WebSocket, WebSocketServer } from "ws";
 import { createReplayBuffer } from "./replay-buffer.ts";
+import { sanitizeInject } from "./sanitize.ts";
 import { listLessons, resolveWorkspacePath } from "./workspace.ts";
 
 const PORT = 7529; // ADR 0006: spells PLAY, loopback only, no --port flag
@@ -130,6 +131,10 @@ wss.on("connection", (socket) => {
     }
     if (control?.type === "resize" && Number.isInteger(control.cols) && Number.isInteger(control.rows) && control.cols > 0 && control.rows > 0) {
       pty.resize(control.cols, control.rows);
+    }
+    // ADR 0005/0001: straight to the PTY, no confirmation, no rate limit — sanitizeInject is the guard.
+    if (control?.type === "inject" && typeof control.text === "string") {
+      pty.write(sanitizeInject(control.text));
     }
   });
   socket.on("close", () => {
