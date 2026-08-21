@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { spawn as spawnOpener } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, statSync, watch } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, watch, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { delimiter, extname, join, resolve, sep } from "node:path";
 import { spawn } from "node-pty";
 import { WebSocket, WebSocketServer } from "ws";
+import { GUIDE, POINTER } from "./guide.ts";
+import { buildJournalEntry } from "./journal.ts";
 import { sanitizeInject } from "./sanitize.ts";
 import { listLessons, resolveWorkspacePath } from "./workspace.ts";
 
@@ -24,6 +26,19 @@ if (!statSync(workspace, { throwIfNoEntry: false })?.isDirectory())
 // unreachable from lesson JS. A fresh workspace has no public/ yet — that's normal, not an error.
 const publicDir = join(workspace, "public");
 mkdirSync(publicDir, { recursive: true });
+
+// ADR 0017: guide + pointers, so the agent discovers the browser context channel on its own.
+// The guide is written unconditionally — a write is cheaper than a compare, and it always
+// matches the running player's version. CLAUDE.md/AGENTS.md are the agent's own files: only
+// create them when absent, never touch existing content.
+const journalDir = join(workspace, ".teach-player");
+mkdirSync(journalDir, { recursive: true });
+writeFileSync(join(journalDir, "GUIDE.md"), GUIDE);
+for (const name of ["CLAUDE.md", "AGENTS.md"]) {
+  const path = join(workspace, name);
+  if (!existsSync(path)) writeFileSync(path, POINTER + "\n");
+  else if (!readFileSync(path, "utf8").includes(".teach-player/GUIDE.md")) console.log(`teach-player: add to ${name}: ${POINTER}`);
+}
 
 // ADR 0016: a stable hash of the workspace path, not a random or fixed port — same workspace
 // always gets the same content origin, so a lesson's localStorage survives across restarts.
@@ -128,7 +143,11 @@ const contentHttp = createServer((request, response) => {
   const ext = extname(resolved).toLowerCase();
   // ADR 0005: the server injects the bridge into every HTML page it serves.
   const html = ext === ".html" || ext === ".htm";
-  response.writeHead(200, { "content-type": CONTENT_MIME[ext] ?? "application/octet-stream" });
+  const headers: Record<string, string> = { "content-type": CONTENT_MIME[ext] ?? "application/octet-stream" };
+  // ADR 0016 hardening: without this, any web page could iframe a lesson at 127.0.0.1 and
+  // receive the bridge's postMessages. Only the picker's own origins may frame a lesson.
+  if (html) headers["content-security-policy"] = `frame-ancestors http://127.0.0.1:${controlPort} http://localhost:${controlPort}`;
+  response.writeHead(200, headers);
   response.end(html ? Buffer.concat([body, Buffer.from('<script src="/teach-bridge.js"></script>')]) : body);
 });
 
@@ -207,6 +226,12 @@ wss.on("connection", (socket) => {
     // ADR 0005/0001: straight to the PTY, no confirmation, no rate limit — sanitizeInject is the guard.
     if (control?.type === "inject" && typeof control.text === "string") {
       pty.write(sanitizeInject(control.text));
+      socket.send(JSON.stringify({ type: "injected" })); // ADR 0017: lets the sender confirm it landed
+    }
+    // ADR 0017: quiet channel — appends to the journal, no PTY write, no reply. Silent drop on failure.
+    if (control?.type === "report") {
+      const entry = buildJournalEntry(control, new Date());
+      if (entry) appendFileSync(join(journalDir, "journal.jsonl"), entry + "\n");
     }
   });
   socket.on("close", () => clients.delete(socket));
@@ -240,10 +265,13 @@ function announceWhenBothReady() {
   spawnOpener(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore" }).on("error", () => {});
 }
 
-contentHttp.listen(contentPort, "127.0.0.1", announceWhenBothReady);
+// ADR 0017: controlPort (needed for the content server's frame-ancestors header) is only known
+// once controlHttp reports its ephemeral port — so contentHttp starts listening from inside this
+// callback instead of in parallel. announceWhenBothReady still tolerates either order finishing first.
 controlHttp.listen(0, "127.0.0.1", () => {
   controlPort = (controlHttp.address() as { port: number }).port;
   okOrigins = [undefined, `http://127.0.0.1:${controlPort}`, `http://localhost:${controlPort}`];
   okControlHosts = [`127.0.0.1:${controlPort}`, `localhost:${controlPort}`];
+  contentHttp.listen(contentPort, "127.0.0.1", announceWhenBothReady);
   announceWhenBothReady();
 });

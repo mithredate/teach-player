@@ -13,28 +13,80 @@
       body {
         display: flex;
         flex-direction: column;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-size: 13px;
       }
       #picker-bar {
         flex: none;
         display: flex;
+        align-items: center;
+        gap: 8px;
         background: #252526;
         border-bottom: 1px solid #333;
+        padding: 4px 8px;
       }
       #picker {
         flex: 1;
-        padding: 4px;
-        background: #252526;
+        padding: 4px 6px;
+        background: #2d2d2d;
         color: #ccc;
-        border: none;
+        border: 1px solid #3c3c3c;
+        border-radius: 3px;
       }
       #send-selection {
         flex: none;
-        padding: 4px 8px;
-        background: #252526;
+        padding: 4px 10px;
+        background: #2d2d2d;
         color: #ccc;
-        border: none;
-        border-left: 1px solid #333;
+        border: 1px solid #3c3c3c;
+        border-radius: 3px;
         cursor: pointer;
+        transition: background-color 0.15s ease;
+      }
+      #send-selection:hover {
+        background: #3a3a3a;
+      }
+      #status {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: #999;
+      }
+      #status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #666; /* disconnected */
+        transition: background-color 0.2s ease;
+      }
+      #status-dot[data-status="connected"] {
+        background: #4caf50;
+      }
+      #status-dot[data-status="syncing"] {
+        background: #d7a43a;
+      }
+      #status-dot[data-status="synced"] {
+        background: #4caf50;
+      }
+      /* ADR 0017: sent-log starts empty — :empty hides it, no JS visibility toggling needed. */
+      #sent-log {
+        flex: none;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        max-width: 40%;
+        overflow: hidden;
+        color: #777;
+        font-size: 11px;
+      }
+      #sent-log:empty {
+        display: none;
+      }
+      #sent-log li {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       #content {
         flex: 1;
@@ -49,6 +101,9 @@
     <div id="picker-bar">
       <select id="picker"></select>
       <button id="send-selection">Send selection</button>
+      <div id="status"><span id="status-dot"></span><span id="status-label">disconnected</span></div>
+      <!-- ADR 0017: newest-first log of the last 5 acked injects, fed by {type:"injected"} frames. -->
+      <ul id="sent-log"></ul>
     </div>
     <!-- ADR 0015: content origin differs from this page's origin, so allow-same-origin is safe here. -->
     <iframe id="content" sandbox="allow-scripts allow-same-origin"></iframe>

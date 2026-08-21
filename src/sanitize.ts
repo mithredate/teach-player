@@ -1,6 +1,8 @@
 // ADR 0005 / 0001: security-load-bearing — whitelist, never a blacklist, so an
 // escape sequence or control character nobody has thought of still can't get through.
-const PRINTABLE = /[\p{L}\p{M}\p{N}\p{P}\p{S}\p{Zs}]/gu;
+// ADR 0017 §3: journal.ts shares this exact class — reports are checked against the same whitelist.
+export const PRINTABLE_CLASS = "\\p{L}\\p{M}\\p{N}\\p{P}\\p{S}\\p{Zs}";
+const PRINTABLE = new RegExp(`[${PRINTABLE_CLASS}]`, "gu");
 const CAP = 10_000;
 
 export function sanitizeInject(text: string): string {

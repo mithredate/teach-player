@@ -1,14 +1,23 @@
 // ADR 0016: the terminal moved to the real one via PTY passthrough — this page is only
-// the content pane now. The ws connection carries fsevent frames in and inject frames out.
+// the content pane now. The ws connection carries fsevent frames in and inject/report frames out.
 
 // ADR 0015 hardening: allow-same-origin means a lesson iframe could otherwise spoof or
 // intercept postMessage — both the sender's identity (source) and its origin must match
-// the content iframe before an inject is trusted. Pure and exported so it's testable
+// the content iframe before a frame is trusted. Pure and exported so it's testable
 // without a browser (test/unit/main.test.js uses plain fake objects, no DOM).
-export function extractInjectText(event: { source: unknown; origin: string; data: unknown }, contentWindow: unknown, contentOrigin: string): string | null {
+// ADR 0017: generalized from extractInjectText — inject and report share the same source+origin
+// proof, only the frame shape differs. Report payloads pass through untouched; the server's
+// buildJournalEntry does the real validation, this guard only proves the iframe origin.
+export function extractForwardFrame(
+  event: { source: unknown; origin: string; data: unknown },
+  contentWindow: unknown,
+  contentOrigin: string,
+): Record<string, unknown> | null {
   if (event.source !== contentWindow || event.origin !== contentOrigin) return null;
   const data = event.data as { type?: unknown; text?: unknown } | null | undefined;
-  return data?.type === "inject" && typeof data.text === "string" && data.text ? data.text : null;
+  if (data?.type === "inject" && typeof data.text === "string" && data.text) return { type: "inject", text: data.text };
+  if (data?.type === "report") return data as Record<string, unknown>;
+  return null;
 }
 
 // DOM wiring only runs in a browser — this module doubles as the import target for the
@@ -19,12 +28,45 @@ if (typeof document !== "undefined") {
   // ADR 0015: the pane lives on its own origin — the control server string-replaced this at serve time.
   const contentOrigin = document.body.dataset.contentOrigin!;
 
+  // ADR 0017: picker-bar status dot + sent-log strip, fed by ws lifecycle and inject acks.
+  const statusDot = document.getElementById("status-dot")!;
+  const statusLabel = document.getElementById("status-label")!;
+  function setStatus(state: string) {
+    statusDot.dataset.status = state;
+    statusLabel.textContent = state;
+  }
+  setStatus("disconnected");
+  socket.onopen = () => setStatus("connected");
+  socket.onclose = () => setStatus("disconnected");
+
+  // FIFO: an inject's ack carries no text back, so line up sent texts in send order to match them to acks.
+  const pendingInjects: string[] = [];
+  const sentLog: string[] = [];
+  const sentLogEl = document.getElementById("sent-log") as HTMLUListElement;
+  function renderSentLog() {
+    sentLogEl.replaceChildren(
+      ...sentLog.slice(0, 5).map((text) => {
+        const item = document.createElement("li");
+        item.textContent = text;
+        return item;
+      }),
+    );
+  }
+
   socket.onmessage = (event) => {
     const message = JSON.parse(event.data);
     if (message.type === "fsevent")
       message.path === picker.value
         ? (content.src = `${contentOrigin}/${encodeURI(picker.value)}?v=${Date.now()}`)
         : fetchFiles().then((paths) => renderPicker(paths, picker.value));
+    if (message.type === "injected") {
+      setStatus("synced");
+      const text = pendingInjects.shift();
+      if (text !== undefined) {
+        sentLog.unshift(text);
+        renderSentLog();
+      }
+    }
   };
 
   // Step 3: content pane — picker lists workspace lessons, newest first; iframe shows the pick.
@@ -57,11 +99,17 @@ if (typeof document !== "undefined") {
     content.src = `${contentOrigin}/${encodeURI(picker.value)}`;
   });
 
-  // Step 5/ADR 0016 hardening: forward only frames genuinely from the content iframe, on its
-  // real origin — the server's sanitizer is the real defense, this closes the spoofing gap.
+  // Step 5/ADR 0016/0017 hardening: forward only frames genuinely from the content iframe, on its
+  // real origin — the server's sanitizer/journal validator is the real defense, this closes the spoofing gap.
   addEventListener("message", (event) => {
-    const text = extractInjectText(event, content.contentWindow, contentOrigin);
-    if (text && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "inject", text }));
+    const frame = extractForwardFrame(event, content.contentWindow, contentOrigin);
+    if (!frame || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify(frame));
+    // Reports are fire-and-forget by design (ADR 0017) — only injects move the status dot.
+    if (frame.type === "inject") {
+      pendingInjects.push(frame.text as string);
+      setStatus("syncing");
+    }
   });
 
   document.getElementById("send-selection")!.addEventListener("click", () => {
