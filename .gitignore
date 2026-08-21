@@ -1,7 +1,7 @@
 node_modules/
 dist/
 
-# ADR 0017: the shared fixture workspace is a real dir the server writes into on every test run.
+# ADR 0017/0018: the shared fixture workspace is a real dir the server writes into on every test run.
 /test/fixtures/workspace/.teach-player/
-/test/fixtures/workspace/CLAUDE.md
-/test/fixtures/workspace/AGENTS.md
+/test/fixtures/workspace/.claude/
+/test/fixtures/workspace/.agents/

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -106,30 +106,47 @@ test("invalid reports are dropped silently, the session lives on", async (t) => 
   assert.deepEqual(JSON.parse(lines[0]).data, { ok: true });
 });
 
-test("a fresh workspace gets the guide and pointer files", async (t) => {
+// ADR 0018: the skill is what makes the agent aware of teach-player — install paths, valid
+// frontmatter and the load-bearing content are all asserted, for both agents.
+test("a fresh workspace gets the teach-player skill installed for both agents", async (t) => {
   const { workspace } = await startPlayer(t);
 
-  const guide = readFileSync(join(workspace, ".teach-player", "GUIDE.md"), "utf8");
-  assert.match(guide, /untrusted data/);
-  // The agent can only interpret journal lines if the guide states the entry formats.
-  assert.match(guide, /"page-open".*\{title\}/);
-  assert.match(guide, /"form-submit".*\{form, fields\}/);
+  for (const agentDir of [".claude", ".agents"]) {
+    const skillDir = join(workspace, agentDir, "skills", "teach-player");
+    const skill = readFileSync(join(skillDir, "SKILL.md"), "utf8");
+    const [, frontmatter] = skill.split("---\n");
+    assert.match(frontmatter, /^name: teach-player$/m);
+    // The description is the only always-in-context part, so it carries the essentials.
+    const [, description] = frontmatter.match(/^description: (.*)$/m);
+    for (const essential of ["teach-player", "public/", "journal", "report", "send"]) assert.ok(description.includes(essential), `description misses ${essential}: ${description}`);
+    // The agent can only interpret journal lines if the skill states the entry formats.
+    assert.match(skill, /`page-open`.*\{title\}/);
+    assert.match(skill, /`form-submit`.*\{form, fields\}/);
 
-  assert.equal(readFileSync(join(workspace, "CLAUDE.md"), "utf8"), "This workspace runs under teach-player — read .teach-player/GUIDE.md first.\n");
-  assert.equal(readFileSync(join(workspace, "AGENTS.md"), "utf8"), "This workspace runs under teach-player — read .teach-player/GUIDE.md first.\n");
+    const security = readFileSync(join(skillDir, "references", "security.md"), "utf8");
+    assert.match(security, /untrusted data/);
+    assert.match(security, /checklist/i);
+  }
+
+  // ADR 0018: user-owned files stay the user's — no pointer files any more.
+  assert.ok(!existsSync(join(workspace, "CLAUDE.md")));
+  assert.ok(!existsSync(join(workspace, "AGENTS.md")));
 });
 
-test("an existing CLAUDE.md is never touched, and prints a hint instead", async (t) => {
+test("a restart rewrites the skill and clears the guide of older versions", async (t) => {
   const workspace = mkdtempSync(join(tmpdir(), "teach-player-"));
+  const skillDir = join(workspace, ".claude", "skills", "teach-player");
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(join(skillDir, "SKILL.md"), "stale skill from an older player\n");
+  mkdirSync(join(workspace, ".teach-player"), { recursive: true });
+  writeFileSync(join(workspace, ".teach-player", "GUIDE.md"), "the ADR 0017 guide\n");
   writeFileSync(join(workspace, "CLAUDE.md"), "my rules\n");
-  writeFileSync(join(workspace, "AGENTS.md"), "already points at .teach-player/GUIDE.md\n");
 
-  const { stdout } = await startPlayer(t, workspace);
-  await waitForOutput(stdout, "add to CLAUDE.md");
+  await startPlayer(t, workspace);
 
+  assert.match(readFileSync(join(skillDir, "SKILL.md"), "utf8"), /^name: teach-player$/m);
+  assert.ok(!existsSync(join(workspace, ".teach-player", "GUIDE.md")));
   assert.equal(readFileSync(join(workspace, "CLAUDE.md"), "utf8"), "my rules\n");
-  assert.equal(readFileSync(join(workspace, "AGENTS.md"), "utf8"), "already points at .teach-player/GUIDE.md\n");
-  assert.ok(!stdout.text.includes("add to AGENTS.md"));
 });
 
 test("an accepted inject is acknowledged on the same socket", async (t) => {
