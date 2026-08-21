@@ -1,0 +1,55 @@
+# Publishes teach-player to npm via trusted publishing (OIDC) — no npm token, per ADR 0011.
+#
+# One-time setup on npmjs.com (a maintainer must do this; cannot be done from this repo):
+#   1. Publish the package to npm once manually (trusted publishing can only be added to an
+#      existing package) OR create the package on npmjs.com first.
+#   2. Go to https://www.npmjs.com/package/teach-player/access (Settings > Trusted Publisher).
+#   3. Add a trusted publisher of type "GitHub Actions" with:
+#        Organization or user: mithredate
+#        Repository:           teach-player
+#        Workflow filename:    release.yml   (filename only, must match this file)
+#        Environment name:     (leave blank — this workflow does not use a GitHub Environment)
+#   4. Save. No npm token is created or stored anywhere.
+#
+# Trigger: publishing a GitHub Release (not a bare `v*` tag push). A Release is a deliberate,
+# reviewable action (title + notes) and is what npm's trusted-publisher UI expects to see in
+# the OIDC claims; a tag push alone gives less room to catch a mistake before it goes public.
+#
+# Verified against docs.npmjs.com/trusted-publishers/ (2026-08):
+#   - Trusted publishing needs npm CLI >= 11.5.1. The npm bundled with setup-node's Node 22
+#     is older, so we upgrade npm explicitly before publishing.
+#   - The job needs `permissions: id-token: write` so it can mint the OIDC token.
+#   - Provenance is documented as automatic under trusted publishing, but we pass
+#     `--provenance` explicitly — several reports find it is not always applied without it.
+#   - We publish with `npm publish`, not `pnpm publish`: pnpm's own OIDC trusted-publishing
+#     support has an open regression (pnpm/pnpm#11513, 404 on publish) as of pnpm 11.
+#     `pnpm install`/`pnpm test` still use pnpm; only the publish step uses npm.
+
+name: release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - name: Update npm to a version that supports trusted publishing (>= 11.5.1)
+        run: npm install -g npm@latest
+      - run: npm publish --provenance

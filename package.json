@@ -1,12 +1,26 @@
 {
   "name": "teach-player",
   "version": "0.0.0",
-  "description": "Watch and interact with an AI coding-agent teaching session in the browser: live terminal next to the lesson content it writes.",
+  "description": "Run an AI coding agent in your terminal and open a live-reloading browser view of the lessons it writes.",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mithredate/teach-player.git"
+  },
+  "keywords": [
+    "cli",
+    "ai-agent",
+    "teaching",
+    "claude",
+    "terminal"
+  ],
   "bin": {
     "teach-player": "dist/server.js"
   },
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -14,7 +28,8 @@
   "scripts": {
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
     "build": "esbuild src/server.ts --bundle --packages=external --platform=node --format=esm --outfile=dist/server.js && esbuild src/client/main.ts --bundle --format=esm --outdir=dist && cp src/client/index.html dist/ && esbuild src/bridge.ts --bundle --format=iife --outfile=dist/teach-bridge.js",
-    "test": "pnpm build && tsc && node --test \"test/**/*.test.js\""
+    "test": "pnpm build && tsc && node --test \"test/**/*.test.js\"",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "node-pty": "1.1.0",

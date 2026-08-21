@@ -1,22 +1,61 @@
 # teach-player
 
-Watch an AI coding agent teach, in your browser. One pane shows the live agent terminal. The other pane shows the lesson content the agent writes.
+Your AI coding agent teaches you in the terminal. The lesson lives in your browser.
 
-> **Status: under construction.** Not on npm yet. This README grows with the tool.
+`teach-player` runs an AI coding agent CLI (Claude Code by default) in your terminal, with full native PTY passthrough. At the same time, it opens a browser page that shows the lesson files the agent writes — live, as the agent writes them.
 
-## Planned quickstart
+<!-- TODO(mehrdad): demo GIF -->
+
+## Quickstart
 
 ```sh
-npx teach-player [workspace-dir] [agent-command...]
+npx teach-player [workspace] [agent-command...]
 ```
 
-The workspace defaults to the current directory. The agent command defaults to `claude`; any agent CLI works the same way (`npx teach-player ~/german codex`). To run a different agent in the current directory, pass `.` as the workspace: `npx teach-player . codex`.
+- `workspace` defaults to the current directory.
+- `agent-command` defaults to `claude`. Any agent CLI works, for example `codex`.
+- To run a different agent in the current directory, pass `.` as the workspace:
 
-**Note:** the first install compiles a native module (`node-pty`). You need Xcode Command Line Tools on macOS, or `build-essential` on Linux.
+  ```sh
+  npx teach-player . codex
+  ```
+
+The agent writes lesson HTML files into `<workspace>/public/`. `teach-player` creates this folder if it does not exist.
+
+**Native module note:** the first install compiles `node-pty`. You need Xcode Command Line Tools on macOS, or `build-essential` on Linux.
+
+## How it works
+
+- **PTY passthrough.** The agent runs in a real pseudo-terminal. Your terminal session is fully native — colors, resizing, and interactive prompts all work as if you ran the agent directly.
+- **Picker + live-reload.** The browser page lists the lesson HTML files under `<workspace>/public/` and shows the selected one in an iframe. The iframe reloads automatically when the agent edits the file.
+- **Bridge and "Send selection".** A lesson page can call `window.teachPlayer.send(text)`, or use the built-in "Send selection" button, to send text back to the agent's terminal.
+- **Two loopback servers.** A control server (ephemeral port) serves the picker page. A content server (stable, per-workspace port) serves only `<workspace>/public/`.
+- **Persistent lesson storage.** Each workspace gets the same content-server port every time. Quiz pages can keep scores in `localStorage` on that stable origin, and the scores survive restarts.
+- **Multiple workspaces.** You can run `teach-player` for several workspaces at once. Opening the same workspace twice fails loudly, instead of silently reusing the running instance.
 
 ## Security
 
-Treat opening a workspace like running its code. The server binds to `127.0.0.1` only.
+Treat opening a workspace like running its code.
+
+- Both servers bind to `127.0.0.1` only. Nothing is reachable from outside your machine.
+- Lesson pages run on a separate origin from the control page. That origin can reach only files under `<workspace>/public/` — it cannot reach the rest of your workspace or your filesystem.
+- The residual risk: any lesson page can read everything under `public/`. Keep private notes outside that folder.
+- Text a lesson sends to the terminal is sanitized against a whitelist and always arrives on a single line, prefixed `[lesson] `. This means injected text can never impersonate you or run shell commands.
+
+## Contributing
+
+Requires Node >=22 and pnpm.
+
+```sh
+pnpm install
+pnpm test   # build + typecheck + tests
+```
+
+The `postinstall` script re-adds the exec bit to node-pty's prebuilt `spawn-helper` binary, because pnpm strips it during install. Do not remove that script.
+
+## Status
+
+Not yet on npm. Publishing is set up (GitHub Actions + npm trusted publishing), but the first release has not shipped yet.
 
 ## License
 
