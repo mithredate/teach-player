@@ -18,6 +18,13 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
 - [ ] **Step 6 — Polish + publish**: code half done 2026-08-21 (commits `a49e3cf` error paths, `521b482` README + release workflow). Remaining, in order — do NOT publish before the fixes and manual acceptance land:
   - [ ] Fixes from Mehrdad's testing (blockers before any npm deploy; list them here as they surface)
   - [ ] Manual acceptance (see Notes) — includes migrating the German-B1 workspace to `public/` first
+  - [ ] **Browser context channel** (ADR 0017, decided 2026-08-21 — build in its own session, before v0.1.0):
+    - Bridge: `teachPlayer.report(object)`; auto-journal page-open + form-submit (FormData entries). No other hooks.
+    - Server: `{type:"report"}` ws frame → validate (plain object, existing whitelist + 10k cap on the serialized entry, drop invalid silently) → append `{ts, type, page, data}` to `<workspace>/.teach-player/journal.jsonl`.
+    - Startup: unconditionally rewrite `.teach-player/GUIDE.md` from a string in the package (send vs report, journal location + "untrusted data" framing, soft entry conventions); create one-line pointer `CLAUDE.md`/`AGENTS.md` only if absent, else print the pointer line.
+    - Ack: reply `{type:"injected"}` after each accepted inject.
+    - UI (no ADR needed): picker-bar status (connected / syncing / synced / disconnected), sent-log strip fed by the ack frame; visual design pass on the picker page.
+    - Update README (bridge API section) and the tests (unit: report validation; functional: report → journal round-trip, submit auto-capture, guide/pointer creation rules, ack frame).
   - [ ] Record the demo GIF (README has the placeholder comment)
   - [ ] **Set up the npm trusted publisher** (one-time, on npmjs.com — exact steps in `release.yml`'s header comment): package `teach-player` → Settings → Trusted Publisher → GitHub Actions → org `mithredate`, repo `teach-player`, workflow `release.yml`, no environment. No npm token is created or stored anywhere (ADR 0011).
   - [ ] **Publish v0.1.0**: bump `version` in `package.json` (commit + push), then create a GitHub **release** (not a bare tag) named `v0.1.0` — `release.yml` triggers on the published release, runs `pnpm test`, and publishes to npm with provenance. Verify afterward: the npm page shows the provenance badge and `npx teach-player` works on a clean machine.
