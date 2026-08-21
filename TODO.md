@@ -16,8 +16,8 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
   - **Unchanged:** `sanitize.ts` + `[lesson] ` prefix, `bridge.ts`, `workspace.ts` guard logic, watcher debounce.
   - Functional tests can drop `--test-concurrency=1` (no fixed ports left to fight over).
 - [ ] **Step 6 — Polish + publish**: code half done 2026-08-21 (commits `a49e3cf` error paths, `521b482` README + release workflow). Remaining, in order — do NOT publish before the fixes and manual acceptance land:
-  - [ ] Fixes from Mehrdad's testing (blockers before any npm deploy; list them here as they surface)
-  - [ ] Manual acceptance (see Notes) — includes migrating the German-B1 workspace to `public/` first. Progress 2026-08-21: localStorage survives restarts ✓, two players from two repos ✓, same-workspace-twice fails loudly ✓, send-selection routes to the right terminal ✓ (all in learn-german + a scratch workspace). Left: explicit confirmation that terminal feel (plan mode, colors, resize) is acceptable
+  - [x] Fixes from Mehrdad's testing (done 2026-08-21): none surfaced beyond the file-browser UI, which is queued as its own grill-then-build item below
+  - [x] Manual acceptance (done 2026-08-21, learn-german + a scratch workspace): terminal feel ✓, localStorage survives restarts ✓, two players from two repos ✓, same-workspace-twice fails loudly ✓, send-selection routes to the right terminal ✓
   - [ ] **Browser context channel** (ADR 0017, decided 2026-08-21 — build in its own session, before v0.1.0):
     - Bridge: `teachPlayer.report(object)`; auto-journal page-open + form-submit (FormData entries). No other hooks.
     - Server: `{type:"report"}` ws frame → validate (plain object, existing whitelist + 10k cap on the serialized entry, drop invalid silently) → append `{ts, type, page, data}` to `<workspace>/.teach-player/journal.jsonl`.
