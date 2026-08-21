@@ -1,8 +1,8 @@
 # teach-player
 
-Public repo. Plans and ADRs live in the private `teach-player-orchestrator` repo (`../teach-player-orchestrator/docs/adr/`); follow them, and propose a new ADR there before deviating.
+Public repo — code, README, and this file only. ALL meta docs (TODO, plans, ADRs, notes) live in the private `teach-player-orchestrator` repo; never create tracking files here. Follow the ADRs (`../teach-player-orchestrator/docs/adr/`), and propose a new one there before deviating.
 
-**"cook"** = read `TODO.md`, do the first unchecked item, check it off, jot loose ends there.
+**"cook"** = read `../teach-player-orchestrator/TODO.md`, do the first unchecked item, check it off, jot loose ends there.
 
 ## Rules
 
