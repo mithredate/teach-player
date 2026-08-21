@@ -80,7 +80,16 @@ const CONTENT_MIME: Record<string, string> = {
   ".xml": "application/xml",
 };
 
+// ADR 0016 hardening: contentPort is a hash of the workspace path, known synchronously — no
+// need to wait for listen(). DNS rebinding could point a hostile domain at 127.0.0.1 and send a
+// request that arrives with a foreign Host header; reject before any routing sees it.
+const okContentHosts = [`127.0.0.1:${contentPort}`, `localhost:${contentPort}`];
+
 const contentHttp = createServer((request, response) => {
+  if (!okContentHosts.includes(request.headers.host ?? "")) {
+    response.writeHead(403).end();
+    return;
+  }
   const url = (request.url ?? "/").split("?")[0]; // lessons may cache-bust assets (style.css?v=2)
 
   // Ships next to server.js, not under public/ — the injection target, not lesson content.
@@ -121,7 +130,15 @@ contentHttp.on("error", (error: NodeJS.ErrnoException) =>
 
 // Control server — the picker shell, /api/files, and the ws. Never serves anything from the
 // workspace itself. Ephemeral port: no fixed 7529 left to collide with another teach-player.
+// ADR 0016 hardening: filled in once listen() below reports the ephemeral port actually bound —
+// same reason okOrigins starts empty.
+let okControlHosts: string[] = [];
+
 const controlHttp = createServer((request, response) => {
+  if (!okControlHosts.includes(request.headers.host ?? "")) {
+    response.writeHead(403).end();
+    return;
+  }
   const url = (request.url ?? "/").split("?")[0];
 
   if (url === "/api/files") {
@@ -133,13 +150,14 @@ const controlHttp = createServer((request, response) => {
   if (url === "/") {
     // Ponytail: static index.html, one placeholder string-replaced with the real content origin.
     const html = readFileSync(join(import.meta.dirname, "index.html"), "utf8").replace("__CONTENT_ORIGIN__", contentOrigin);
-    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    // A lesson must not be able to frame the picker page.
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8", "x-frame-options": "DENY" });
     response.end(html);
     return;
   }
 
   if (url === "/main.js") {
-    response.writeHead(200, { "content-type": "text/javascript" });
+    response.writeHead(200, { "content-type": "text/javascript", "x-frame-options": "DENY" });
     response.end(readFileSync(join(import.meta.dirname, "main.js")));
     return;
   }
@@ -157,7 +175,9 @@ controlHttp.on("error", (error: NodeJS.ErrnoException) => fail(error.message));
 let okOrigins: (string | undefined)[] = [];
 const wss = new WebSocketServer({
   server: controlHttp,
-  verifyClient: ({ origin }: { origin?: string }) => okOrigins.includes(origin),
+  // Same DNS-rebinding gap as the HTTP routes above — check the upgrade request's Host too.
+  verifyClient: ({ origin, req }: { origin?: string; req: { headers: { host?: string } } }) =>
+    okOrigins.includes(origin) && okControlHosts.includes(req.headers.host ?? ""),
 });
 // ADR 0016: no takeover — any number of tabs can watch and inject at once.
 const clients = new Set<WebSocket>();
@@ -211,5 +231,6 @@ contentHttp.listen(contentPort, "127.0.0.1", announceWhenBothReady);
 controlHttp.listen(0, "127.0.0.1", () => {
   controlPort = (controlHttp.address() as { port: number }).port;
   okOrigins = [undefined, `http://127.0.0.1:${controlPort}`, `http://localhost:${controlPort}`];
+  okControlHosts = [`127.0.0.1:${controlPort}`, `localhost:${controlPort}`];
   announceWhenBothReady();
 });
