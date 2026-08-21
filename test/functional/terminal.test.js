@@ -27,8 +27,9 @@ async function startPlayer(t) {
   });
   const stdout = { text: "" };
   player.stdout.on("data", (chunk) => (stdout.text += chunk.toString()));
-  await waitForOutput(stdout, "http://127.0.0.1:7529");
-  return { player, stdout };
+  // ADR 0016: the control port is ephemeral now — read it back off the printed startup line.
+  const [controlUrl] = await waitForMatch(stdout, /http:\/\/127\.0\.0\.1:\d+/);
+  return { player, stdout, controlUrl };
 }
 
 async function waitForOutput(stdout, text) {
@@ -37,6 +38,15 @@ async function waitForOutput(stdout, text) {
     await sleep(20);
   }
   assert.fail(`never saw ${JSON.stringify(text)} on stdout — held ${JSON.stringify(stdout.text)}`);
+}
+
+async function waitForMatch(stdout, regex) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const match = stdout.text.match(regex);
+    if (match) return match;
+    await sleep(20);
+  }
+  assert.fail(`never matched ${regex} on stdout — held ${JSON.stringify(stdout.text)}`);
 }
 
 test("bytes travel terminal → agent → terminal", async (t) => {
@@ -59,23 +69,23 @@ test("the agent's exit code passes through to the player", async (t) => {
 });
 
 test("a web page from a foreign origin cannot connect", async (t) => {
-  await startPlayer(t);
+  const { controlUrl } = await startPlayer(t);
 
-  const foreign = new WebSocket("ws://127.0.0.1:7529/", { headers: { origin: "https://evil.example" } });
+  const foreign = new WebSocket(`${controlUrl}/`, { headers: { origin: "https://evil.example" } });
   const [, response] = await once(foreign, "unexpected-response");
 
   assert.equal(response.statusCode, 401);
 
-  const own = new WebSocket("ws://127.0.0.1:7529/", { headers: { origin: "http://127.0.0.1:7529" } });
+  const own = new WebSocket(`${controlUrl}/`, { headers: { origin: controlUrl } });
   await once(own, "open");
   own.close();
 });
 
 test("garbage control frames are ignored, the session lives on", async (t) => {
-  const { stdout } = await startPlayer(t);
+  const { stdout, controlUrl } = await startPlayer(t);
   await waitForOutput(stdout, "fake-agent ready");
 
-  const socket = new WebSocket("ws://127.0.0.1:7529/");
+  const socket = new WebSocket(`${controlUrl}/`);
   await once(socket, "open");
 
   socket.send("not json");

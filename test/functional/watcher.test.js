@@ -27,12 +27,18 @@ async function startPlayer(t, workspace) {
   // read for the player's whole life — draining it with a for-await-break would EPIPE the pty.
   const stdout = { text: "" };
   player.stdout.on("data", (chunk) => (stdout.text += chunk.toString()));
-  for (let attempt = 0; attempt < 100 && !stdout.text.includes("http://127.0.0.1:7529"); attempt++) await sleep(20);
+  let controlUrl;
+  for (let attempt = 0; attempt < 100 && !controlUrl; attempt++) {
+    controlUrl = stdout.text.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0];
+    if (!controlUrl) await sleep(20);
+  }
+  assert.ok(controlUrl, `never saw a control URL on stdout — held ${JSON.stringify(stdout.text)}`);
+  return controlUrl;
 }
 
-function connect() {
+function connect(controlUrl) {
   // ADR 0016: pty output no longer travels over ws — only fsevent/control frames do.
-  const socket = new WebSocket("ws://127.0.0.1:7529/");
+  const socket = new WebSocket(`${controlUrl}/`);
   const terminal = { notices: [] };
   socket.on("message", (data) => terminal.notices.push(JSON.parse(data.toString())));
   return { socket, terminal };
@@ -48,29 +54,30 @@ async function waitForFsevent(terminal, path) {
 
 test("editing a workspace file reaches the client as an fsevent", async (t) => {
   const workspace = mkdtempSync(join(tmpdir(), "teach-player-"));
-  await startPlayer(t, workspace);
+  const controlUrl = await startPlayer(t, workspace);
 
-  const { socket, terminal } = connect();
+  const { socket, terminal } = connect(controlUrl);
   await once(socket, "open");
   await sleep(50); // let the watcher settle before the write, so the fsevent isn't lost to a race
 
-  writeFileSync(join(workspace, "lesson.html"), "<p>hi</p>");
+  // ADR 0015/0016: the watcher watches public/, not the workspace root.
+  writeFileSync(join(workspace, "public", "lesson.html"), "<p>hi</p>");
 
   await waitForFsevent(terminal, "lesson.html");
 });
 
 test(".git changes are not broadcast", async (t) => {
   const workspace = mkdtempSync(join(tmpdir(), "teach-player-"));
-  mkdirSync(join(workspace, ".git"));
-  await startPlayer(t, workspace);
+  mkdirSync(join(workspace, "public", ".git"), { recursive: true });
+  const controlUrl = await startPlayer(t, workspace);
 
-  const { socket, terminal } = connect();
+  const { socket, terminal } = connect(controlUrl);
   await once(socket, "open");
   await sleep(50);
 
-  writeFileSync(join(workspace, ".git", "config"), "[core]\n");
+  writeFileSync(join(workspace, "public", ".git", "config"), "[core]\n");
   await sleep(300);
-  writeFileSync(join(workspace, "visible.html"), "<p>hi</p>");
+  writeFileSync(join(workspace, "public", "visible.html"), "<p>hi</p>");
 
   await waitForFsevent(terminal, "visible.html");
 

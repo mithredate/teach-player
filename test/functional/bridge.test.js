@@ -26,8 +26,9 @@ async function startPlayer(t) {
   });
   const stdout = { text: "" };
   player.stdout.on("data", (chunk) => (stdout.text += chunk.toString()));
-  await waitForOutput(stdout, "http://127.0.0.1:7529");
-  return { stdout };
+  // ADR 0016: the control port is ephemeral now — read it back off the printed startup line.
+  const [controlUrl] = await waitForMatch(stdout, /http:\/\/127\.0\.0\.1:\d+/);
+  return { stdout, controlUrl };
 }
 
 async function waitForOutput(stdout, text) {
@@ -38,11 +39,20 @@ async function waitForOutput(stdout, text) {
   assert.fail(`never saw ${JSON.stringify(text)} on stdout — held ${JSON.stringify(stdout.text)}`);
 }
 
+async function waitForMatch(stdout, regex) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const match = stdout.text.match(regex);
+    if (match) return match;
+    await sleep(20);
+  }
+  assert.fail(`never matched ${regex} on stdout — held ${JSON.stringify(stdout.text)}`);
+}
+
 test("an inject frame reaches the agent sanitized and prefixed", async (t) => {
-  const { stdout } = await startPlayer(t);
+  const { stdout, controlUrl } = await startPlayer(t);
   await waitForOutput(stdout, "fake-agent ready");
 
-  const socket = new WebSocket("ws://127.0.0.1:7529/");
+  const socket = new WebSocket(`${controlUrl}/`);
   await once(socket, "open");
 
   socket.send(JSON.stringify({ type: "inject", text: "!evil\r\ninjected" }));
@@ -53,10 +63,10 @@ test("an inject frame reaches the agent sanitized and prefixed", async (t) => {
 });
 
 test("malformed inject frames are ignored, the session lives on", async (t) => {
-  const { stdout } = await startPlayer(t);
+  const { stdout, controlUrl } = await startPlayer(t);
   await waitForOutput(stdout, "fake-agent ready");
 
-  const socket = new WebSocket("ws://127.0.0.1:7529/");
+  const socket = new WebSocket(`${controlUrl}/`);
   await once(socket, "open");
 
   socket.send(JSON.stringify({ type: "inject" }));

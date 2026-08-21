@@ -45,11 +45,12 @@
     </style>
     <script type="module" src="/main.js"></script>
   </head>
-  <body>
+  <body data-content-origin="__CONTENT_ORIGIN__">
     <div id="picker-bar">
       <select id="picker"></select>
       <button id="send-selection">Send selection</button>
     </div>
-    <iframe id="content" sandbox="allow-scripts"></iframe>
+    <!-- ADR 0015: content origin differs from this page's origin, so allow-same-origin is safe here. -->
+    <iframe id="content" sandbox="allow-scripts allow-same-origin"></iframe>
   </body>
 </html>
