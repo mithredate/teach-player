@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 import { spawn as spawnOpener } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, statSync, watch } from "node:fs";
 import { createServer } from "node:http";
 import { delimiter, extname, join, resolve, sep } from "node:path";
 import { spawn } from "node-pty";
 import { WebSocket, WebSocketServer } from "ws";
 import { buildJournalEntry } from "./journal.ts";
 import { sanitizeInject } from "./sanitize.ts";
-import { SECURITY, SKILL, SKILL_DIRS, SKILL_NAME } from "./skill.ts";
 import { listLessons, resolveWorkspacePath } from "./workspace.ts";
 
 function fail(message: string): never {
@@ -30,15 +29,14 @@ mkdirSync(publicDir, { recursive: true });
 const journalDir = join(workspace, ".teach-player");
 mkdirSync(journalDir, { recursive: true });
 
-// ADR 0018: the skill is tool-owned — written wholesale every run, so it always matches the
-// running player and needs no diffing. User-owned files (CLAUDE.md, AGENTS.md, .gitignore) are
-// never touched; the GUIDE.md of earlier versions is ours, so it goes.
-for (const agentDir of SKILL_DIRS) {
-  const skillDir = join(workspace, agentDir, "skills", SKILL_NAME);
-  mkdirSync(join(skillDir, "references"), { recursive: true });
-  writeFileSync(join(skillDir, "SKILL.md"), SKILL);
-  writeFileSync(join(skillDir, "references", "security.md"), SECURITY);
-}
+// ADR 0018: the skill is tool-owned — copied wholesale every run, so it always matches the
+// running player and needs no diffing. It ships as real markdown next to server.js (amended
+// 2026-08-21: a `${` in markdown inside a TS template literal broke the build silently).
+// Claude Code reads <workspace>/.claude/skills/, codex reads .agents/skills/ — that pair is the
+// minimal set, so neither agent sees the skill twice. User-owned files (CLAUDE.md, AGENTS.md,
+// .gitignore) are never touched; the GUIDE.md of earlier versions is ours, so it goes.
+for (const agentDir of [".claude", ".agents"])
+  cpSync(join(import.meta.dirname, "skill"), join(workspace, agentDir, "skills", "teach-player"), { recursive: true });
 rmSync(join(journalDir, "GUIDE.md"), { force: true });
 
 // ADR 0016: a stable hash of the workspace path, not a random or fixed port — same workspace
