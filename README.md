@@ -13,14 +13,34 @@ npx teach-player [workspace] [agent-command...]
 ```
 
 - `workspace` defaults to the current directory.
-- `agent-command` defaults to `claude`. Any agent CLI works, for example `codex`.
+- `agent-command` defaults to `claude`. Any agent CLI works, for example `codex`. Set `TEACH_PLAYER_AGENT` to change your default — it is a per-user setting, so a repo never forces an agent on whoever opens it.
 - To run a different agent in the current directory, pass `.` as the workspace:
 
   ```sh
   npx teach-player . codex
   ```
 
-The agent writes lesson HTML files into `<workspace>/public/`. `teach-player` creates this folder if it does not exist.
+The agent writes lesson HTML files into `<workspace>/public/`.
+
+### First run in a workspace
+
+Before it starts the agent, `teach-player` lists the folders it would create and waits for one keypress:
+
+```
+teach-player prepares /path/to/workspace. It will create:
+
+  public/                        lesson pages, served to your browser
+  .teach-player/                 journal.jsonl — what the browser reports back to the agent
+  .claude/skills/teach-player/   teaches claude the lesson format, the SDK and the journal
+  .agents/skills/teach-player/   the same skill for codex
+
+The two skill folders are rewritten on every run. Commit them or ignore them — your call.
+Launching: claude   (set TEACH_PLAYER_AGENT to change the default)
+
+Continue? [Y/n]
+```
+
+Answer `n` and nothing is written. Later runs show nothing, because only missing folders are listed. With no terminal on stdin (CI, a piped `npx`) the summary still prints and preparing is implied.
 
 **Native module note:** the first install compiles `node-pty`. You need Xcode Command Line Tools on macOS, or `build-essential` on Linux.
 

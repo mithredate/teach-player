@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { spawn as spawnOpener } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, statSync, watch } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, watch } from "node:fs";
 import { createServer } from "node:http";
-import { delimiter, extname, join, resolve, sep } from "node:path";
+import { delimiter, extname, join, relative, resolve, sep } from "node:path";
+import { createInterface } from "node:readline/promises";
 import { spawn } from "node-pty";
 import { WebSocket, WebSocketServer } from "ws";
 import { buildJournalEntry } from "./journal.ts";
@@ -21,37 +22,72 @@ const workspace = resolve(workspaceArg);
 if (!statSync(workspace, { throwIfNoEntry: false })?.isDirectory())
   fail(`not a directory: ${workspace}\nusage: teach-player [workspace] [command…]  (defaults: current directory, claude)`);
 
+// ADR 0007 (amended by ADR 0019): an explicit [command…] wins, then TEACH_PLAYER_AGENT — a
+// global per-user preference, since a repo must not force an agent on whoever opens it — then claude.
+const [agent = process.env.TEACH_PLAYER_AGENT || "claude", ...agentArgs] = command;
+
+// node-pty gives a typo'd command no error text — the pty just exits 1 silently. Check first,
+// before the gate below: no point asking to prepare a workspace for an agent that cannot start.
+const found = agent.includes(sep)
+  ? statSync(resolve(agent), { throwIfNoEntry: false })
+  : (process.env.PATH ?? "").split(delimiter).some((dir) => dir && statSync(join(dir, agent), { throwIfNoEntry: false }));
+if (!found) fail(`command not found: ${agent}`);
+
 // ADR 0015/0016: the pane is scoped to public/ only — everything else in the workspace is
 // unreachable from lesson JS. A fresh workspace has no public/ yet — that's normal, not an error.
 const publicDir = join(workspace, "public");
-mkdirSync(publicDir, { recursive: true });
-
 const journalDir = join(workspace, ".teach-player");
-mkdirSync(journalDir, { recursive: true });
+// ADR 0018: Claude Code reads <workspace>/.claude/skills/, codex reads .agents/skills/ — that
+// pair is the minimal set, so neither agent sees the skill twice.
+const skillDirs = [".claude", ".agents"].map((agentDir) => join(workspace, agentDir, "skills", "teach-player"));
 
+// ADR 0019: the missing paths are the whole state — no marker file, no version file. They are
+// listed once, before any write and before the PTY takes the terminal, because a print after the
+// agent starts is swallowed by its TUI (ADR 0017 acceptance).
+const WRITES: [string, string][] = [
+  [publicDir, "lesson pages, served to your browser"],
+  [journalDir, "journal.jsonl — what the browser reports back to the agent"],
+  [skillDirs[0], "teaches claude the lesson format, the SDK and the journal"],
+  [skillDirs[1], "the same skill for codex"],
+];
+const missing = WRITES.filter(([path]) => !existsSync(path));
+
+if (missing.length) {
+  const width = Math.max(...missing.map(([path]) => relative(workspace, path).length)) + 4;
+  console.log(`\nteach-player prepares ${workspace}. It will create:\n`);
+  for (const [path, purpose] of missing) console.log(`  ${(relative(workspace, path) + "/").padEnd(width)}${purpose}`);
+  console.log(`\nThe two skill folders are rewritten on every run. Commit them or ignore them — your call.`);
+  console.log(`Launching: ${agent}   (set TEACH_PLAYER_AGENT to change the default)\n`);
+
+  // Nobody to ask on a piped npx or in CI, so preparing is implied — the summary still prints.
+  if (process.stdin.isTTY) {
+    const readline = createInterface({ input: process.stdin, output: process.stdout });
+    const answer = (await readline.question("Continue? [Y/n] ")).trim().toLowerCase();
+    readline.close(); // leaves stdin cooked and clean — raw-mode passthrough takes over below
+    if (answer.startsWith("n")) {
+      console.log(
+        `\nNothing written.\n\nWithout the skill the agent does not know the lesson format, the SDK or the journal.` +
+          `\nWithout public/ there is nothing to serve — the session would be a plain ${agent} session\nwith a server attached for nothing. So teach-player stops here.\n`,
+      );
+      process.exit(0); // a decline is not remembered: the next launch is a new request
+    }
+  }
+}
+
+mkdirSync(publicDir, { recursive: true });
+mkdirSync(journalDir, { recursive: true });
 // ADR 0018: the skill is tool-owned — copied wholesale every run, so it always matches the
 // running player and needs no diffing. It ships as real markdown next to server.js (amended
 // 2026-08-21: a `${` in markdown inside a TS template literal broke the build silently).
-// Claude Code reads <workspace>/.claude/skills/, codex reads .agents/skills/ — that pair is the
-// minimal set, so neither agent sees the skill twice. User-owned files (CLAUDE.md, AGENTS.md,
-// .gitignore) are never touched; the GUIDE.md of earlier versions is ours, so it goes.
-for (const agentDir of [".claude", ".agents"])
-  cpSync(join(import.meta.dirname, "skill"), join(workspace, agentDir, "skills", "teach-player"), { recursive: true });
+// User-owned files (CLAUDE.md, AGENTS.md, .gitignore) are never touched; the GUIDE.md of earlier
+// versions is ours, so it goes.
+for (const skillDir of skillDirs) cpSync(join(import.meta.dirname, "skill"), skillDir, { recursive: true });
 rmSync(join(journalDir, "GUIDE.md"), { force: true });
 
 // ADR 0016: a stable hash of the workspace path, not a random or fixed port — same workspace
 // always gets the same content origin, so a lesson's localStorage survives across restarts.
 const contentPort = (createHash("sha256").update(workspace).digest().readUInt32BE(0) % 10000) + 20000;
 const contentOrigin = `http://127.0.0.1:${contentPort}`;
-
-// ADR 0007: everything after the workspace is the agent command, handed to the PTY verbatim.
-const [agent = "claude", ...agentArgs] = command;
-
-// node-pty gives a typo'd command no error text — the pty just exits 1 silently. Check first.
-const found = agent.includes(sep)
-  ? statSync(resolve(agent), { throwIfNoEntry: false })
-  : (process.env.PATH ?? "").split(delimiter).some((dir) => dir && statSync(join(dir, agent), { throwIfNoEntry: false }));
-if (!found) fail(`command not found: ${agent}`);
 
 let pty: ReturnType<typeof spawn>;
 try {
