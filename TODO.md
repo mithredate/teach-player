@@ -7,7 +7,8 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
 - [x] **Step 3 — Content pane** (done 2026-08-20): static serving + traversal guard, `sandbox="allow-scripts"`, bridge-script injection (ADR 0005), `/api/files`, picker
 - [x] **Step 4 — Watcher** (done 2026-08-20): recursive fs.watch → debounced fsevent frames, iframe auto-reload (cache-busted), picker refresh with "● " badge on new files
 - [x] **Step 5 — The bridge** (done 2026-08-20): whitelist sanitizer + `[lesson] ` prefix + `\r` (ADR 0005, TDD, `src/sanitize.ts`), `window.teachPlayer.send()` bridge API, send-selection button via injected helper
-- [ ] **Step 6 — Polish + publish**: README (GIF, security sentence, node-gyp note, npx), error paths, npm trusted publishing with provenance (ADR 0011)
+- [ ] **Content-pane rework — two-origin scoped serve** (ADR 0015, decided 2026-08-21): serve only `<workspace>/public/` (fail loudly if missing) on a **second port 7530**, real origin, iframe `sandbox="allow-scripts allow-same-origin"`; iframe `src` → `http://127.0.0.1:7530/<path-under-public>`. Full web platform + real storage in the pane; private siblings unreachable. Keep sanitizer + `[lesson]` prefix + bridge unchanged. Load-bearing (each needs a functional test): (a) shell `message` handler also requires `event.origin === "http://127.0.0.1:7530"` and posts to the iframe with that explicit target origin, not `"*"`; (b) ws-origin whitelist rejects `Origin: http://127.0.0.1:7530`. Watcher + `/api/files` scope to `public/`. Expand the workspace MIME map for framework assets (`.mjs`, `.wasm`, `.map`, `.woff`/`.woff2`, `.ttf`, `.ico`, `.webmanifest`, `.txt`, `.xml`).
+- [ ] **Step 6 — Polish + publish**: README (GIF, security sentence incl. the `public/`-read residual per ADR 0015, node-gyp note, npx), error paths, npm trusted publishing with provenance (ADR 0011)
 
 ## Notes / loose ends
 
