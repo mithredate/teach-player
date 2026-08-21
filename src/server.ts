@@ -5,12 +5,10 @@ import { createServer } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { spawn } from "node-pty";
 import { WebSocket, WebSocketServer } from "ws";
-import { createReplayBuffer } from "./replay-buffer.ts";
 import { sanitizeInject } from "./sanitize.ts";
 import { listLessons, resolveWorkspacePath } from "./workspace.ts";
 
 const PORT = 7529; // ADR 0006: spells PLAY, loopback only, no --port flag
-const REPLAY_BYTES = 200 * 1024; // ADR 0003
 
 function fail(message: string): never {
   console.error(`teach-player: ${message}`);
@@ -28,18 +26,28 @@ const [agent = "claude", ...agentArgs] = command;
 const pty = spawn(agent, agentArgs, {
   cwd: workspace,
   name: "xterm-256color",
-  cols: 80,
-  rows: 24,
-  encoding: null, // raw bytes, so PTY output and WebSocket frames are the same thing
+  cols: process.stdout.columns || 80,
+  rows: process.stdout.rows || 24,
+  encoding: null, // raw bytes straight to process.stdout, no re-encoding round trip
 });
 
-const replay = createReplayBuffer(REPLAY_BYTES);
-let client: WebSocket | null = null;
+// ADR 0016: the agent runs in the user's real terminal, like `script` — raw stdin in, pty
+// output straight to stdout. Tests pipe a non-TTY stdin; isTTY guards setRawMode for them.
+if (process.stdin.isTTY) process.stdin.setRawMode(true);
+process.stdin.on("data", (chunk) => pty.write(chunk));
+
+process.stdout.on("resize", () => pty.resize(process.stdout.columns || 80, process.stdout.rows || 24));
+
+pty.onData((chunk) => process.stdout.write(chunk as unknown as Buffer)); // encoding:null → Buffer, despite the string type
+
+pty.onExit(({ exitCode }) => {
+  if (process.stdin.isTTY) process.stdin.setRawMode(false);
+  process.exit(exitCode);
+});
 
 const shell: Record<string, [file: string, mime: string] | undefined> = {
   "/": ["index.html", "text/html; charset=utf-8"],
   "/main.js": ["main.js", "text/javascript"],
-  "/main.css": ["main.css", "text/css"],
   "/teach-bridge.js": ["teach-bridge.js", "text/javascript"],
 };
 // Step 3: content pane. Extension whitelist only — anything else is octet-stream.
@@ -108,38 +116,24 @@ const wss = new WebSocketServer({
   server: http,
   verifyClient: ({ origin }: { origin?: string }) => OK_ORIGINS.includes(origin),
 });
+// ADR 0016: no takeover — any number of tabs can watch and inject at once.
+const clients = new Set<WebSocket>();
 wss.on("connection", (socket) => {
-  // ADR 0002: the newest tab takes over; the previous one is told and closed.
-  if (client?.readyState === WebSocket.OPEN) {
-    client.send(JSON.stringify({ type: "notice", text: "session taken over by a newer tab" }));
-    client.close();
-  }
-  client = socket;
-  socket.send(replay.replay(), { binary: true });
-
+  clients.add(socket);
   socket.on("message", (data, isBinary) => {
-    if (socket !== client) return;
-    if (isBinary) {
-      pty.write(data as Buffer);
-      return;
-    }
+    if (isBinary) return; // pty output no longer travels over ws — nothing to do with binary frames
     let control;
     try {
       control = JSON.parse(data.toString());
     } catch {
       return;
     }
-    if (control?.type === "resize" && Number.isInteger(control.cols) && Number.isInteger(control.rows) && control.cols > 0 && control.rows > 0) {
-      pty.resize(control.cols, control.rows);
-    }
     // ADR 0005/0001: straight to the PTY, no confirmation, no rate limit — sanitizeInject is the guard.
     if (control?.type === "inject" && typeof control.text === "string") {
       pty.write(sanitizeInject(control.text));
     }
   });
-  socket.on("close", () => {
-    if (socket === client) client = null;
-  });
+  socket.on("close", () => clients.delete(socket));
 });
 
 // Step 4: watch the workspace so the browser can react to edits (Node >=22: recursive
@@ -153,21 +147,10 @@ watch(workspace, { recursive: true }, (_event, filename) => {
   pendingPaths.add(path);
   flush ??= setTimeout(() => {
     flush = null;
-    for (const path of pendingPaths) if (client?.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type: "fsevent", path }));
+    for (const path of pendingPaths)
+      for (const socket of clients) if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "fsevent", path }));
     pendingPaths.clear();
   }, 100);
-});
-
-pty.onData((chunk) => {
-  // encoding:null makes node-pty emit Buffers, but its types still say string.
-  replay.add(chunk as unknown as Buffer);
-  if (client?.readyState === WebSocket.OPEN) client.send(chunk, { binary: true });
-});
-
-pty.onExit(({ exitCode }) => {
-  const notice = JSON.stringify({ type: "notice", text: `agent exited (code ${exitCode})` });
-  if (client?.readyState === WebSocket.OPEN) client.send(notice, () => process.exit(exitCode));
-  else process.exit(exitCode);
 });
 
 http.listen(PORT, "127.0.0.1", () => {

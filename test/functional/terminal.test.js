@@ -14,81 +14,48 @@ const fakeAgent = new URL("../fixtures/fake-agent.js", import.meta.url).pathname
 async function startPlayer(t) {
   const workspace = mkdtempSync(join(tmpdir(), "teach-player-"));
   const player = spawn(process.execPath, [serverScript, workspace, process.execPath, fakeAgent], {
-    // An empty PATH hides the browser opener, which ADR 0006 makes non-fatal.
+    // An empty PATH hides the browser opener, which ADR 0006 makes non-fatal. stdin is a
+    // pipe (non-TTY) so tests can write to it, same as `script`'s non-interactive callers.
     env: { ...process.env, PATH: "" },
-    stdio: ["ignore", "pipe", "inherit"],
+    stdio: ["pipe", "pipe", "inherit"],
   });
   t.after(async () => {
-    player.kill();
-    await once(player, "exit");
+    if (player.exitCode === null && player.signalCode === null) {
+      player.kill();
+      await once(player, "exit");
+    }
   });
-  for await (const chunk of player.stdout) if (chunk.toString().includes("http://127.0.0.1:7529")) break;
+  const stdout = { text: "" };
+  player.stdout.on("data", (chunk) => (stdout.text += chunk.toString()));
+  await waitForOutput(stdout, "http://127.0.0.1:7529");
+  return { player, stdout };
 }
 
-function connect() {
-  const socket = new WebSocket("ws://127.0.0.1:7529/");
-  const terminal = { output: "", notices: [] };
-  socket.on("message", (data, isBinary) =>
-    isBinary ? (terminal.output += data.toString()) : terminal.notices.push(JSON.parse(data.toString())),
-  );
-  return { socket, terminal };
-}
-
-async function waitForOutput(terminal, text) {
+async function waitForOutput(stdout, text) {
   for (let attempt = 0; attempt < 100; attempt++) {
-    if (terminal.output.includes(text)) return;
+    if (stdout.text.includes(text)) return;
     await sleep(20);
   }
-  assert.fail(`never saw ${JSON.stringify(text)} — terminal held ${JSON.stringify(terminal.output)}`);
+  assert.fail(`never saw ${JSON.stringify(text)} on stdout — held ${JSON.stringify(stdout.text)}`);
 }
 
-test("bytes travel from the browser to the agent and back", async (t) => {
-  await startPlayer(t);
+test("bytes travel terminal → agent → terminal", async (t) => {
+  const { player, stdout } = await startPlayer(t);
+  await waitForOutput(stdout, "fake-agent ready");
 
-  const { socket, terminal } = connect();
-  await once(socket, "open");
-  await waitForOutput(terminal, "fake-agent ready");
+  player.stdin.write("hello\r");
 
-  socket.send(Buffer.from("hello\r"));
-
-  await waitForOutput(terminal, "echo:hello");
+  await waitForOutput(stdout, "echo:hello");
 });
 
-test("a client that connects later gets the earlier output replayed", async (t) => {
-  await startPlayer(t);
+test("the agent's exit code passes through to the player", async (t) => {
+  const { player, stdout } = await startPlayer(t);
+  await waitForOutput(stdout, "fake-agent ready");
 
-  const early = connect();
-  await once(early.socket, "open");
-  early.socket.send(Buffer.from("ping\r"));
-  await waitForOutput(early.terminal, "echo:ping");
-  early.socket.close();
-  await once(early.socket, "close");
+  player.stdin.write("\x03"); // fake-agent exits 0 on Ctrl-C
 
-  const late = connect();
-  await once(late.socket, "open");
-
-  await waitForOutput(late.terminal, "echo:ping"); // replayed: this client typed nothing
-});
-
-test("the newest tab takes over and the old one is told and closed", async (t) => {
-  await startPlayer(t);
-
-  const old = connect();
-  await once(old.socket, "open");
-  await waitForOutput(old.terminal, "fake-agent ready");
-
-  const newest = connect();
-  await once(newest.socket, "open");
-  await once(old.socket, "close");
-
-  assert.deepEqual(
-    old.terminal.notices.map((frame) => frame.type),
-    ["notice"],
-  );
-  assert.match(old.terminal.notices[0].text, /taken over/);
-
-  newest.socket.send(Buffer.from("second\r"));
-  await waitForOutput(newest.terminal, "echo:second");
+  const [exitCode] = await once(player, "exit");
+  assert.equal(exitCode, 0);
 });
 
 test("a web page from a foreign origin cannot connect", async (t) => {
@@ -105,15 +72,16 @@ test("a web page from a foreign origin cannot connect", async (t) => {
 });
 
 test("garbage control frames are ignored, the session lives on", async (t) => {
-  await startPlayer(t);
+  const { stdout } = await startPlayer(t);
+  await waitForOutput(stdout, "fake-agent ready");
 
-  const { socket, terminal } = connect();
+  const socket = new WebSocket("ws://127.0.0.1:7529/");
   await once(socket, "open");
-  await waitForOutput(terminal, "fake-agent ready");
 
   socket.send("not json");
-  socket.send(JSON.stringify({ type: "resize", cols: -1, rows: "huge" }));
-  socket.send(Buffer.from("alive\r"));
+  socket.send(JSON.stringify({ type: "inject" })); // malformed: no text
+  socket.send(JSON.stringify({ type: "inject", text: "alive" }));
 
-  await waitForOutput(terminal, "echo:alive");
+  // pty output no longer travels over ws — the proof of life is on the player's own stdout.
+  await waitForOutput(stdout, "echo:[lesson] alive");
 });

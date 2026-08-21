@@ -5,6 +5,7 @@ import { once } from "node:events";
 import { utimesSync } from "node:fs";
 import { request } from "node:http";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 const serverScript = new URL("../../dist/server.js", import.meta.url).pathname;
 const fakeAgent = new URL("../fixtures/fake-agent.js", import.meta.url).pathname;
@@ -17,10 +18,16 @@ async function startPlayer(t) {
     stdio: ["ignore", "pipe", "inherit"],
   });
   t.after(async () => {
-    player.kill();
-    await once(player, "exit");
+    if (player.exitCode === null && player.signalCode === null) {
+      player.kill();
+      await once(player, "exit");
+    }
   });
-  for await (const chunk of player.stdout) if (chunk.toString().includes("http://127.0.0.1:7529")) break;
+  // ADR 0016: pty output streams straight to this stdout pipe now, so it must stay open and
+  // read for the player's whole life — draining it with a for-await-break would EPIPE the pty.
+  const stdout = { text: "" };
+  player.stdout.on("data", (chunk) => (stdout.text += chunk.toString()));
+  for (let attempt = 0; attempt < 100 && !stdout.text.includes("http://127.0.0.1:7529"); attempt++) await sleep(20);
 }
 
 // node:http's request() sends `path` on the wire untouched — unlike fetch, it never

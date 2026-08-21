@@ -18,18 +18,23 @@ async function startPlayer(t, workspace) {
     stdio: ["ignore", "pipe", "inherit"],
   });
   t.after(async () => {
-    player.kill();
-    await once(player, "exit");
+    if (player.exitCode === null && player.signalCode === null) {
+      player.kill();
+      await once(player, "exit");
+    }
   });
-  for await (const chunk of player.stdout) if (chunk.toString().includes("http://127.0.0.1:7529")) break;
+  // ADR 0016: pty output streams straight to this stdout pipe now, so it must stay open and
+  // read for the player's whole life — draining it with a for-await-break would EPIPE the pty.
+  const stdout = { text: "" };
+  player.stdout.on("data", (chunk) => (stdout.text += chunk.toString()));
+  for (let attempt = 0; attempt < 100 && !stdout.text.includes("http://127.0.0.1:7529"); attempt++) await sleep(20);
 }
 
 function connect() {
+  // ADR 0016: pty output no longer travels over ws — only fsevent/control frames do.
   const socket = new WebSocket("ws://127.0.0.1:7529/");
-  const terminal = { output: "", notices: [] };
-  socket.on("message", (data, isBinary) =>
-    isBinary ? (terminal.output += data.toString()) : terminal.notices.push(JSON.parse(data.toString())),
-  );
+  const terminal = { notices: [] };
+  socket.on("message", (data) => terminal.notices.push(JSON.parse(data.toString())));
   return { socket, terminal };
 }
 
@@ -47,7 +52,7 @@ test("editing a workspace file reaches the client as an fsevent", async (t) => {
 
   const { socket, terminal } = connect();
   await once(socket, "open");
-  await sleep(50); // let the replay frame land before we start watching for the fsevent
+  await sleep(50); // let the watcher settle before the write, so the fsevent isn't lost to a race
 
   writeFileSync(join(workspace, "lesson.html"), "<p>hi</p>");
 

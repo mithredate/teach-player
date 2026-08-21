@@ -19,53 +19,49 @@ async function startPlayer(t) {
     stdio: ["ignore", "pipe", "inherit"],
   });
   t.after(async () => {
-    player.kill();
-    await once(player, "exit");
+    if (player.exitCode === null && player.signalCode === null) {
+      player.kill();
+      await once(player, "exit");
+    }
   });
-  for await (const chunk of player.stdout) if (chunk.toString().includes("http://127.0.0.1:7529")) break;
+  const stdout = { text: "" };
+  player.stdout.on("data", (chunk) => (stdout.text += chunk.toString()));
+  await waitForOutput(stdout, "http://127.0.0.1:7529");
+  return { stdout };
 }
 
-function connect() {
-  const socket = new WebSocket("ws://127.0.0.1:7529/");
-  const terminal = { output: "", notices: [] };
-  socket.on("message", (data, isBinary) =>
-    isBinary ? (terminal.output += data.toString()) : terminal.notices.push(JSON.parse(data.toString())),
-  );
-  return { socket, terminal };
-}
-
-async function waitForOutput(terminal, text) {
+async function waitForOutput(stdout, text) {
   for (let attempt = 0; attempt < 100; attempt++) {
-    if (terminal.output.includes(text)) return;
+    if (stdout.text.includes(text)) return;
     await sleep(20);
   }
-  assert.fail(`never saw ${JSON.stringify(text)} — terminal held ${JSON.stringify(terminal.output)}`);
+  assert.fail(`never saw ${JSON.stringify(text)} on stdout — held ${JSON.stringify(stdout.text)}`);
 }
 
 test("an inject frame reaches the agent sanitized and prefixed", async (t) => {
-  await startPlayer(t);
+  const { stdout } = await startPlayer(t);
+  await waitForOutput(stdout, "fake-agent ready");
 
-  const { socket, terminal } = connect();
+  const socket = new WebSocket("ws://127.0.0.1:7529/");
   await once(socket, "open");
-  await waitForOutput(terminal, "fake-agent ready");
 
   socket.send(JSON.stringify({ type: "inject", text: "!evil\r\ninjected" }));
 
   // The fake agent echoes its stdin minus CR/LF: the CR/LF the attacker sent never
   // reached the PTY as control bytes — they were stripped before pty.write, not by the echo.
-  await waitForOutput(terminal, "echo:[lesson] !evilinjected");
+  await waitForOutput(stdout, "echo:[lesson] !evilinjected");
 });
 
 test("malformed inject frames are ignored, the session lives on", async (t) => {
-  await startPlayer(t);
+  const { stdout } = await startPlayer(t);
+  await waitForOutput(stdout, "fake-agent ready");
 
-  const { socket, terminal } = connect();
+  const socket = new WebSocket("ws://127.0.0.1:7529/");
   await once(socket, "open");
-  await waitForOutput(terminal, "fake-agent ready");
 
   socket.send(JSON.stringify({ type: "inject" }));
   socket.send(JSON.stringify({ type: "inject", text: 42 }));
-  socket.send(Buffer.from("alive\r"));
+  socket.send(JSON.stringify({ type: "inject", text: "alive" }));
 
-  await waitForOutput(terminal, "echo:alive");
+  await waitForOutput(stdout, "echo:[lesson] alive");
 });

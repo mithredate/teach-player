@@ -3,7 +3,6 @@
   <head>
     <meta charset="utf-8" />
     <title>teach-player</title>
-    <link rel="stylesheet" href="/main.css" />
     <style>
       html,
       body {
@@ -13,12 +12,7 @@
       }
       body {
         display: flex;
-      }
-      #content-pane {
-        display: flex;
         flex-direction: column;
-        width: 50%;
-        height: 100%;
       }
       #picker-bar {
         flex: none;
@@ -48,22 +42,14 @@
         border: none;
         background: #fff;
       }
-      #terminal {
-        width: 50%;
-        height: 100%;
-        padding: 4px;
-      }
     </style>
     <script type="module" src="/main.js"></script>
   </head>
   <body>
-    <div id="content-pane">
-      <div id="picker-bar">
-        <select id="picker"></select>
-        <button id="send-selection">Send selection</button>
-      </div>
-      <iframe id="content" sandbox="allow-scripts"></iframe>
+    <div id="picker-bar">
+      <select id="picker"></select>
+      <button id="send-selection">Send selection</button>
     </div>
-    <div id="terminal"></div>
+    <iframe id="content" sandbox="allow-scripts"></iframe>
   </body>
 </html>
