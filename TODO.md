@@ -15,7 +15,12 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
   - **Hardening one-liners:** `X-Frame-Options: DENY` on picker-page routes; Host-header whitelist on both servers.
   - **Unchanged:** `sanitize.ts` + `[lesson] ` prefix, `bridge.ts`, `workspace.ts` guard logic, watcher debounce.
   - Functional tests can drop `--test-concurrency=1` (no fixed ports left to fight over).
-- [ ] **Step 6 — Polish + publish**: code half done 2026-08-21 (commits `a49e3cf` error paths, `521b482` README + release workflow). Remaining, all on Mehrdad: record the demo GIF (README placeholder), configure the npm trusted publisher (exact steps in `release.yml`'s header), then — after manual acceptance below — publish v0.1.0 by creating a GitHub release
+- [ ] **Step 6 — Polish + publish**: code half done 2026-08-21 (commits `a49e3cf` error paths, `521b482` README + release workflow). Remaining, in order — do NOT publish before the fixes and manual acceptance land:
+  - [ ] Fixes from Mehrdad's testing (blockers before any npm deploy; list them here as they surface)
+  - [ ] Manual acceptance (see Notes) — includes migrating the German-B1 workspace to `public/` first
+  - [ ] Record the demo GIF (README has the placeholder comment)
+  - [ ] **Set up the npm trusted publisher** (one-time, on npmjs.com — exact steps in `release.yml`'s header comment): package `teach-player` → Settings → Trusted Publisher → GitHub Actions → org `mithredate`, repo `teach-player`, workflow `release.yml`, no environment. No npm token is created or stored anywhere (ADR 0011).
+  - [ ] **Publish v0.1.0**: bump `version` in `package.json` (commit + push), then create a GitHub **release** (not a bare tag) named `v0.1.0` — `release.yml` triggers on the published release, runs `pnpm test`, and publishes to npm with provenance. Verify afterward: the npm page shows the provenance badge and `npx teach-player` works on a clean machine.
 
 ## Notes / loose ends
 
