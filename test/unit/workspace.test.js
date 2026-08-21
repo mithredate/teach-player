@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listLessons, resolveWorkspacePath } from "../../src/workspace.ts";
@@ -80,6 +80,14 @@ test("listLessons skips node_modules", () => {
 test("listLessons ignores non-html files", () => {
   const root = mkdtempSync(join(tmpdir(), "teach-player-workspace-"));
   writeFileSync(join(root, "notes.txt"), "ignore me");
+  writeFileSync(join(root, "lesson.html"), "hi");
+
+  assert.deepEqual(listLessons(root), ["lesson.html"]);
+});
+
+test("listLessons skips a broken symlink instead of throwing", () => {
+  const root = mkdtempSync(join(tmpdir(), "teach-player-workspace-"));
+  symlinkSync(join(root, "does-not-exist"), join(root, "broken.html"));
   writeFileSync(join(root, "lesson.html"), "hi");
 
   assert.deepEqual(listLessons(root), ["lesson.html"]);

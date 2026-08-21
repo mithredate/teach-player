@@ -28,7 +28,9 @@ export function listLessons(root: string): string[] {
     for (const entry of readdirSync(dir)) {
       if (entry === ".git" || entry === "node_modules") continue;
       const full = join(dir, entry);
-      const stat = statSync(full);
+      // A broken symlink's target doesn't exist — skip it instead of throwing and killing the server.
+      const stat = statSync(full, { throwIfNoEntry: false });
+      if (!stat) continue;
       if (stat.isDirectory()) walk(full);
       else if (entry.endsWith(".html")) files.push({ path: relative(root, full).split(sep).join("/"), mtimeMs: stat.mtimeMs });
     }

@@ -3,7 +3,7 @@ import { spawn as spawnOpener } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, watch } from "node:fs";
 import { createServer } from "node:http";
-import { extname, join, resolve, sep } from "node:path";
+import { delimiter, extname, join, resolve, sep } from "node:path";
 import { spawn } from "node-pty";
 import { WebSocket, WebSocketServer } from "ws";
 import { sanitizeInject } from "./sanitize.ts";
@@ -32,13 +32,26 @@ const contentOrigin = `http://127.0.0.1:${contentPort}`;
 
 // ADR 0007: everything after the workspace is the agent command, handed to the PTY verbatim.
 const [agent = "claude", ...agentArgs] = command;
-const pty = spawn(agent, agentArgs, {
-  cwd: workspace,
-  name: "xterm-256color",
-  cols: process.stdout.columns || 80,
-  rows: process.stdout.rows || 24,
-  encoding: null, // raw bytes straight to process.stdout, no re-encoding round trip
-});
+
+// node-pty gives a typo'd command no error text — the pty just exits 1 silently. Check first.
+const found = agent.includes(sep)
+  ? statSync(resolve(agent), { throwIfNoEntry: false })
+  : (process.env.PATH ?? "").split(delimiter).some((dir) => dir && statSync(join(dir, agent), { throwIfNoEntry: false }));
+if (!found) fail(`command not found: ${agent}`);
+
+let pty: ReturnType<typeof spawn>;
+try {
+  pty = spawn(agent, agentArgs, {
+    cwd: workspace,
+    name: "xterm-256color",
+    cols: process.stdout.columns || 80,
+    rows: process.stdout.rows || 24,
+    encoding: null, // raw bytes straight to process.stdout, no re-encoding round trip
+  });
+} catch (error) {
+  // The command exists (checked above), so a synchronous throw here is some other spawn failure.
+  fail(`could not start ${agent}: ${(error as Error).message}`);
+}
 
 // ADR 0016: the agent runs in the user's real terminal, like `script` — raw stdin in, pty
 // output straight to stdout. Tests pipe a non-TTY stdin; isTTY guards setRawMode for them.
