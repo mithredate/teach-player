@@ -15,7 +15,7 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
   - **Hardening one-liners:** `X-Frame-Options: DENY` on picker-page routes; Host-header whitelist on both servers.
   - **Unchanged:** `sanitize.ts` + `[lesson] ` prefix, `bridge.ts`, `workspace.ts` guard logic, watcher debounce.
   - Functional tests can drop `--test-concurrency=1` (no fixed ports left to fight over).
-- [ ] **Step 6 — Polish + publish**: README (GIF, security sentence incl. the `public/`-read residual per ADR 0015, node-gyp note, npx), error paths, npm trusted publishing with provenance (ADR 0011)
+- [ ] **Step 6 — Polish + publish**: code half done 2026-08-21 (commits `a49e3cf` error paths, `521b482` README + release workflow). Remaining, all on Mehrdad: record the demo GIF (README placeholder), configure the npm trusted publisher (exact steps in `release.yml`'s header), then — after manual acceptance below — publish v0.1.0 by creating a GitHub release
 
 ## Notes / loose ends
 
@@ -25,6 +25,6 @@ Progress tracker — the *only* place state lives. Detail stays in the orchestra
 - German-B1 workspace needs migrating before acceptance: move `mock/` + `assets/` under `public/` (lesson-internal `../assets/` links keep working — both live under the new root).
 - The step-4 note stands: the `.git` functional test asserts an exact fsevent count — loosen to "no .git paths" if CI flakes.
 - Typechecking restored 2026-08-20 (ADR 0014, orchestrator repo): `tsc --noEmit` runs inside `pnpm test`; `@types/node` pinned to the 22.x line to match the engine floor.
-- `pnpm install` needs a `postinstall` chmod: pnpm strips the exec bit from node-pty's prebuilt `spawn-helper` (ADR 0013). README contributor note still pending (step 6).
+- `pnpm install` needs a `postinstall` chmod: pnpm strips the exec bit from node-pty's prebuilt `spawn-helper` (ADR 0013). README contributor note added 2026-08-21.
 - `teach-player` linked globally 2026-08-20 (`pnpm link` → `~/Library/pnpm/bin`, symlink to this repo's `dist/server.js`, rebuilds picked up automatically). Gotcha: `pnpm link` errors with "global bin directory not in PATH" *after* creating the link when the shell hasn't re-sourced `~/.zshrc` post-`pnpm setup` — open a new terminal.
-- `listLessons` uses bare `statSync`: a broken symlink in the workspace throws inside the request handler and kills the server. Fold into step 6 (error paths) — a try/continue in the walk.
+- ~~`listLessons` broken-symlink crash~~ fixed 2026-08-21 in `a49e3cf`, with the agent-command-not-found precheck (node-pty exits a typo'd command silently — the PATH scan before spawn is what produces the error message).
