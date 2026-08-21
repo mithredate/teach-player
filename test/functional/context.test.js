@@ -111,6 +111,9 @@ test("a fresh workspace gets the guide and pointer files", async (t) => {
 
   const guide = readFileSync(join(workspace, ".teach-player", "GUIDE.md"), "utf8");
   assert.match(guide, /untrusted data/);
+  // The agent can only interpret journal lines if the guide states the entry formats.
+  assert.match(guide, /"page-open".*\{title\}/);
+  assert.match(guide, /"form-submit".*\{form, fields\}/);
 
   assert.equal(readFileSync(join(workspace, "CLAUDE.md"), "utf8"), "This workspace runs under teach-player — read .teach-player/GUIDE.md first.\n");
   assert.equal(readFileSync(join(workspace, "AGENTS.md"), "utf8"), "This workspace runs under teach-player — read .teach-player/GUIDE.md first.\n");
