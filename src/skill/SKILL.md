@@ -22,7 +22,8 @@ Run `printenv TEACH_PLAYER_URL`.
 ## Writing a lesson
 
 - One self-contained `.html` file per lesson under `public/`. Inline the CSS and JS, or link assets that also live under `public/`.
-- Saving a file reloads the open page in the browser. The newest file comes first in the user's lesson picker.
+- Saving a file reloads the open page in the browser. The user browses files in a tree, folders first then files, A→Z — a number prefix (`0001-…`) keeps lessons in order.
+- The page runs in a sandboxed iframe: `alert()`, `confirm()` and `prompt()` do nothing (`confirm()` returns `false`), and downloads are blocked. Build every dialog into the page itself — a `<dialog>` element or a two-step button ("Reset" → "Really reset?").
 
 ## The teachPlayer SDK
 
