@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listLessons, resolveWorkspacePath } from "../../src/workspace.ts";
+import { listFiles, resolveWorkspacePath } from "../../src/workspace.ts";
 
 test("a plain file resolves inside the root", () => {
   assert.equal(resolveWorkspacePath("/tmp/ws", "a.html"), "/tmp/ws/a.html");
@@ -41,54 +41,62 @@ test("malformed percent-encoding is rejected", () => {
   assert.equal(resolveWorkspacePath("/tmp/ws", "%"), null);
 });
 
-test("listLessons sorts by mtime, newest first", () => {
+test("listFiles sorts A→Z by full path", () => {
   const root = mkdtempSync(join(tmpdir(), "teach-player-workspace-"));
-  writeFileSync(join(root, "oldest.html"), "old");
-  writeFileSync(join(root, "newest.html"), "new");
-  utimesSync(join(root, "oldest.html"), new Date("2020-01-01"), new Date("2020-01-01"));
-  utimesSync(join(root, "newest.html"), new Date("2020-06-01"), new Date("2020-06-01"));
+  writeFileSync(join(root, "zed.html"), "z");
+  writeFileSync(join(root, "aaa.html"), "a");
 
-  assert.deepEqual(listLessons(root), ["newest.html", "oldest.html"]);
+  assert.deepEqual(listFiles(root), ["aaa.html", "zed.html"]);
 });
 
-test("listLessons recurses into subdirectories", () => {
+test("listFiles recurses into subdirectories", () => {
   const root = mkdtempSync(join(tmpdir(), "teach-player-workspace-"));
   mkdirSync(join(root, "mock"));
   writeFileSync(join(root, "mock", "ut1.html"), "hi");
 
-  assert.deepEqual(listLessons(root), ["mock/ut1.html"]);
+  assert.deepEqual(listFiles(root), ["mock/ut1.html"]);
 });
 
-test("listLessons skips .git", () => {
+test("listFiles skips .git", () => {
   const root = mkdtempSync(join(tmpdir(), "teach-player-workspace-"));
   mkdirSync(join(root, ".git"));
   writeFileSync(join(root, ".git", "config.html"), "not a lesson");
   writeFileSync(join(root, "lesson.html"), "hi");
 
-  assert.deepEqual(listLessons(root), ["lesson.html"]);
+  assert.deepEqual(listFiles(root), ["lesson.html"]);
 });
 
-test("listLessons skips node_modules", () => {
+test("listFiles skips node_modules", () => {
   const root = mkdtempSync(join(tmpdir(), "teach-player-workspace-"));
   mkdirSync(join(root, "node_modules"));
   writeFileSync(join(root, "node_modules", "x.html"), "not a lesson");
   writeFileSync(join(root, "lesson.html"), "hi");
 
-  assert.deepEqual(listLessons(root), ["lesson.html"]);
+  assert.deepEqual(listFiles(root), ["lesson.html"]);
 });
 
-test("listLessons ignores non-html files", () => {
+test("listFiles lists every file, not just .html", () => {
   const root = mkdtempSync(join(tmpdir(), "teach-player-workspace-"));
-  writeFileSync(join(root, "notes.txt"), "ignore me");
+  writeFileSync(join(root, "notes.txt"), "no longer ignored");
   writeFileSync(join(root, "lesson.html"), "hi");
 
-  assert.deepEqual(listLessons(root), ["lesson.html"]);
+  assert.deepEqual(listFiles(root), ["lesson.html", "notes.txt"]);
 });
 
-test("listLessons skips a broken symlink instead of throwing", () => {
+test("listFiles excludes dotfile segments", () => {
+  const root = mkdtempSync(join(tmpdir(), "teach-player-workspace-"));
+  writeFileSync(join(root, ".env"), "secret");
+  mkdirSync(join(root, ".hidden"));
+  writeFileSync(join(root, ".hidden", "x.html"), "hidden");
+  writeFileSync(join(root, "lesson.html"), "hi");
+
+  assert.deepEqual(listFiles(root), ["lesson.html"]);
+});
+
+test("listFiles skips a broken symlink instead of throwing", () => {
   const root = mkdtempSync(join(tmpdir(), "teach-player-workspace-"));
   symlinkSync(join(root, "does-not-exist"), join(root, "broken.html"));
   writeFileSync(join(root, "lesson.html"), "hi");
 
-  assert.deepEqual(listLessons(root), ["lesson.html"]);
+  assert.deepEqual(listFiles(root), ["lesson.html"]);
 });

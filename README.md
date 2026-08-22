@@ -47,7 +47,7 @@ Answer `n` and nothing is written. Later runs show nothing, because only missing
 ## How it works
 
 - **PTY passthrough.** The agent runs in a real pseudo-terminal. Your terminal session is fully native — colors, resizing, and interactive prompts all work as if you ran the agent directly.
-- **Picker + live-reload.** The browser page lists the lesson HTML files under `<workspace>/public/` and shows the selected one in an iframe. The iframe reloads automatically when the agent edits the file.
+- **File tree + live-reload.** A collapsible sidebar lists everything under `<workspace>/public/` and shows the selected file in an iframe. The selection lives in the page URL, so Back, Forward and refresh just work. The iframe reloads automatically when the agent edits the open file.
 - **Bridge and "Send selection".** Every lesson page gets `window.teachPlayer` injected. `teachPlayer.send(text)` sends text straight to the agent's terminal — so does the built-in "Send selection" button. `teachPlayer.report(data)` writes a JSON entry to a journal instead; it never interrupts the agent.
 - **Context journal.** Page opens and form submits are journaled automatically to `<workspace>/.teach-player/journal.jsonl`, as `{ts, type, page, data}` lines. The agent reads the journal on demand to learn which page is open and what the user answered. Nothing pushes into the conversation.
 - **Agent skill.** On startup, `teach-player` installs a `teach-player` skill into the workspace — `.claude/skills/` for Claude Code, `.agents/skills/` for Codex — so the agent knows the lesson format, the SDK and the journal from the first prompt. The skill is rewritten on every run to match the running version. Your own files (`CLAUDE.md`, `AGENTS.md`, `.gitignore`) are never touched.

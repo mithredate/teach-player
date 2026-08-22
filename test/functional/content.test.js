@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -92,18 +92,25 @@ test("a traversal attempt is rejected with the same 404 as an unknown route", as
   assert.equal(response.status, 404);
 });
 
-test("/api/files lists public/'s html files, newest mtime first", async (t) => {
-  const ut1 = join(fixtureWorkspace, "public/mock/ut1.html");
-  const bridgeAware = join(fixtureWorkspace, "public/bridge-aware.html");
-  utimesSync(ut1, new Date("2020-01-01"), new Date("2020-01-01"));
-  utimesSync(bridgeAware, new Date("2020-06-01"), new Date("2020-06-01")); // touched later → newest
-
+test("/_tp/files lists every file under public/, A→Z", async (t) => {
   const { controlUrl } = await startPlayer(t, fixtureWorkspace);
 
-  const response = await get(controlUrl, "/api/files");
+  const response = await get(controlUrl, "/_tp/files");
 
   assert.equal(response.headers["content-type"], "application/json");
-  assert.deepEqual(JSON.parse(response.body), ["bridge-aware.html", "mock/ut1.html"]);
+  assert.deepEqual(JSON.parse(response.body), ["assets/style.css", "bridge-aware.html", "mock/ut1.html"]);
+});
+
+test("an arbitrary control-server path serves the picker shell, and /_tp/files still returns JSON", async (t) => {
+  const { controlUrl } = await startPlayer(t, fixtureWorkspace);
+
+  const page = await get(controlUrl, "/lessons/0001.html");
+  assert.equal(page.status, 200);
+  assert.equal(page.headers["content-type"], "text/html; charset=utf-8");
+  assert.equal(page.headers["x-frame-options"], "DENY");
+
+  const files = await get(controlUrl, "/_tp/files");
+  assert.equal(files.headers["content-type"], "application/json");
 });
 
 test("the bridge script is served from the content origin", async (t) => {
@@ -125,7 +132,7 @@ test("public/ is auto-created in a fresh workspace", async (t) => {
 });
 
 // ADR 0015: the load-bearing isolation property — public/ is the only reachable surface.
-test("a file outside public/ is invisible to the content server and /api/files", async (t) => {
+test("a file outside public/ is invisible to the content server and /_tp/files", async (t) => {
   const workspace = mkdtempSync(join(tmpdir(), "teach-player-"));
   writeFileSync(join(workspace, "secret.md"), "do not leak me");
 
@@ -135,7 +142,7 @@ test("a file outside public/ is invisible to the content server and /api/files",
   const response = await get(contentOrigin, "/secret.md");
   assert.equal(response.status, 404);
 
-  const files = await get(controlUrl, "/api/files");
+  const files = await get(controlUrl, "/_tp/files");
   assert.deepEqual(JSON.parse(files.body), []);
 });
 

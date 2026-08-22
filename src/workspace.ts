@@ -20,22 +20,23 @@ export function resolveWorkspacePath(root: string, urlPath: string): string | nu
   return candidate;
 }
 
-// /api/files: every *.html under root, recursive, newest mtime first.
-export function listLessons(root: string): string[] {
-  const files: { path: string; mtimeMs: number }[] = [];
+// /_tp/files (ADR 0021): every file under root, recursive, dotfile segments and node_modules
+// excluded, sorted A→Z by full path. No extension filter — the tree shows everything.
+export function listFiles(root: string): string[] {
+  const files: string[] = [];
 
   function walk(dir: string) {
     for (const entry of readdirSync(dir)) {
-      if (entry === ".git" || entry === "node_modules") continue;
+      if (entry.startsWith(".") || entry === "node_modules") continue;
       const full = join(dir, entry);
       // A broken symlink's target doesn't exist — skip it instead of throwing and killing the server.
       const stat = statSync(full, { throwIfNoEntry: false });
       if (!stat) continue;
       if (stat.isDirectory()) walk(full);
-      else if (entry.endsWith(".html")) files.push({ path: relative(root, full).split(sep).join("/"), mtimeMs: stat.mtimeMs });
+      else files.push(relative(root, full).split(sep).join("/"));
     }
   }
   walk(root);
 
-  return files.sort((a, b) => b.mtimeMs - a.mtimeMs).map((f) => f.path);
+  return files.sort();
 }

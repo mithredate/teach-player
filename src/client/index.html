@@ -12,48 +12,122 @@
       }
       body {
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
         font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
         font-size: 13px;
       }
-      #picker-bar {
+      #sidebar {
+        flex: none;
+        width: 260px;
+        display: flex;
+        flex-direction: column;
+        background: #252526;
+        border-right: 1px solid #333;
+        overflow: hidden;
+      }
+      /* ADR 0021 decision 1: collapsed is CSS-only — toggle, status dot and send-selection stay. */
+      #sidebar.collapsed {
+        width: 36px;
+      }
+      #sidebar.collapsed .hide-collapsed {
+        display: none;
+      }
+      #sidebar-header {
         flex: none;
         display: flex;
         align-items: center;
         gap: 8px;
-        background: #252526;
+        padding: 6px 8px;
         border-bottom: 1px solid #333;
-        padding: 4px 8px;
       }
-      #picker {
-        flex: 1;
-        padding: 4px 6px;
-        background: #2d2d2d;
+      #sidebar-header span {
         color: #ccc;
-        border: 1px solid #3c3c3c;
-        border-radius: 3px;
+        white-space: nowrap;
+        overflow: hidden;
       }
+      #toggle,
       #send-selection {
         flex: none;
-        padding: 4px 10px;
         background: #2d2d2d;
         color: #ccc;
         border: 1px solid #3c3c3c;
         border-radius: 3px;
         cursor: pointer;
+        padding: 4px 8px;
         transition: background-color 0.15s ease;
       }
+      #toggle:hover,
       #send-selection:hover {
         background: #3a3a3a;
       }
-      #status {
+      #tree {
+        flex: 1;
+        overflow: auto;
+        padding: 4px;
+      }
+      #tree summary {
+        cursor: pointer;
+        color: #ccc;
+        padding: 3px 4px;
+        list-style: none;
+      }
+      #tree summary::-webkit-details-marker {
+        display: none;
+      }
+      #tree summary::before {
+        content: "▸ ";
+      }
+      #tree details[open] > summary::before {
+        content: "▾ ";
+      }
+      #tree details {
+        margin-left: 4px;
+      }
+      #tree button.file {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        text-align: left;
+        background: none;
+        border: none;
+        color: #ccc;
+        padding: 3px 4px 3px 18px;
+        cursor: pointer;
+        font: inherit;
+      }
+      #tree button.file:hover {
+        background: #2a2d2e;
+      }
+      #tree button.file.selected {
+        background: #37373d;
+        color: #fff;
+      }
+      #tree button.file.new::after {
+        content: "";
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        margin-left: 6px;
+        border-radius: 50%;
+        background: #4caf50;
+        vertical-align: middle;
+      }
+      #sidebar-footer {
         flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 6px 8px;
+        border-top: 1px solid #333;
+      }
+      #status {
         display: flex;
         align-items: center;
         gap: 5px;
         color: #999;
       }
       #status-dot {
+        flex: none;
         width: 8px;
         height: 8px;
         border-radius: 50%;
@@ -71,12 +145,9 @@
       }
       /* ADR 0017: sent-log starts empty — :empty hides it, no JS visibility toggling needed. */
       #sent-log {
-        flex: none;
         margin: 0;
         padding: 0;
         list-style: none;
-        max-width: 40%;
-        overflow: hidden;
         color: #777;
         font-size: 11px;
       }
@@ -90,21 +161,26 @@
       }
       #content {
         flex: 1;
-        width: 100%;
         border: none;
         background: #fff;
       }
     </style>
-    <script type="module" src="/main.js"></script>
+    <script type="module" src="/_tp/main.js"></script>
   </head>
   <body data-content-origin="__CONTENT_ORIGIN__">
-    <div id="picker-bar">
-      <select id="picker"></select>
-      <button id="send-selection">Send selection</button>
-      <div id="status"><span id="status-dot"></span><span id="status-label">disconnected</span></div>
-      <!-- ADR 0017: newest-first log of the last 5 acked injects, fed by {type:"injected"} frames. -->
-      <ul id="sent-log"></ul>
-    </div>
+    <aside id="sidebar">
+      <div id="sidebar-header">
+        <button id="toggle" title="Collapse sidebar">☰</button>
+        <span class="hide-collapsed">teach-player</span>
+      </div>
+      <nav id="tree" class="hide-collapsed"></nav>
+      <div id="sidebar-footer">
+        <div id="status"><span id="status-dot"></span><span id="status-label" class="hide-collapsed">disconnected</span></div>
+        <button id="send-selection" title="Send selection">➤<span class="hide-collapsed"> Send selection</span></button>
+        <!-- ADR 0017: newest-first log of the last 5 acked injects, fed by {type:"injected"} frames. -->
+        <ul id="sent-log" class="hide-collapsed"></ul>
+      </div>
+    </aside>
     <!-- ADR 0015: content origin differs from this page's origin, so allow-same-origin is safe here. -->
     <iframe id="content" sandbox="allow-scripts allow-same-origin"></iframe>
   </body>

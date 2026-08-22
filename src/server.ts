@@ -10,7 +10,7 @@ import { spawn } from "node-pty";
 import { WebSocket, WebSocketServer } from "ws";
 import { buildJournalEntry } from "./journal.ts";
 import { sanitizeInject } from "./sanitize.ts";
-import { listLessons, resolveWorkspacePath } from "./workspace.ts";
+import { listFiles, resolveWorkspacePath } from "./workspace.ts";
 
 function fail(message: string): never {
   console.error(`teach-player: ${message}`);
@@ -97,7 +97,8 @@ const contentOrigin = `http://127.0.0.1:${contentPort}`;
 let pty: ReturnType<typeof spawn>;
 
 // ADR 0015: content server — serves ONLY public/, on its own origin, so a malicious lesson's
-// fetch() can't reach the rest of the workspace. Extension whitelist only — anything else 404s.
+// fetch() can't reach the rest of the workspace. Extension whitelist; anything else falls back
+// to application/octet-stream below.
 const CONTENT_MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".htm": "text/html; charset=utf-8",
@@ -120,6 +121,16 @@ const CONTENT_MIME: Record<string, string> = {
   ".webmanifest": "application/manifest+json",
   ".txt": "text/plain",
   ".xml": "application/xml",
+  // ADR 0021 decision 4: without these, the tree can list them but the iframe can't render
+  // them — a sandboxed frame with no allow-downloads does nothing on an octet-stream click.
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".pdf": "application/pdf",
+  ".md": "text/markdown",
 };
 
 // ADR 0016 hardening: contentPort is a hash of the workspace path, known synchronously — no
@@ -187,28 +198,24 @@ const controlHttp = createServer((request, response) => {
   }
   const url = (request.url ?? "/").split("?")[0];
 
-  if (url === "/api/files") {
+  if (url === "/_tp/files") {
     response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify(listLessons(publicDir)));
+    response.end(JSON.stringify(listFiles(publicDir)));
     return;
   }
 
-  if (url === "/") {
-    // Ponytail: static index.html, one placeholder string-replaced with the real content origin.
-    const html = readFileSync(join(import.meta.dirname, "index.html"), "utf8").replace("__CONTENT_ORIGIN__", contentOrigin);
-    // A lesson must not be able to frame the picker page.
-    response.writeHead(200, { "content-type": "text/html; charset=utf-8", "x-frame-options": "DENY" });
-    response.end(html);
-    return;
-  }
-
-  if (url === "/main.js") {
+  if (url === "/_tp/main.js") {
     response.writeHead(200, { "content-type": "text/javascript", "x-frame-options": "DENY" });
     response.end(readFileSync(join(import.meta.dirname, "main.js")));
     return;
   }
 
-  response.writeHead(404).end();
+  // ADR 0021 decision 5: the picker shell is served for ANY other path — the URL itself carries
+  // the selection, so there is no "unknown route" left to 404 on this server.
+  const html = readFileSync(join(import.meta.dirname, "index.html"), "utf8").replace("__CONTENT_ORIGIN__", contentOrigin);
+  // A lesson must not be able to frame the picker page.
+  response.writeHead(200, { "content-type": "text/html; charset=utf-8", "x-frame-options": "DENY" });
+  response.end(html);
 });
 
 // Registered before the WebSocketServer, which re-emits http errors as its own and would throw
