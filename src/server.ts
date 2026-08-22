@@ -2,6 +2,7 @@
 import { spawn as spawnOpener } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, watch } from "node:fs";
+import { once } from "node:events";
 import { createServer } from "node:http";
 import { delimiter, extname, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -89,33 +90,11 @@ rmSync(join(journalDir, "GUIDE.md"), { force: true });
 const contentPort = (createHash("sha256").update(workspace).digest().readUInt32BE(0) % 10000) + 20000;
 const contentOrigin = `http://127.0.0.1:${contentPort}`;
 
+// ADR 0020: spawned after the control server binds (below) — the PTY child needs
+// TEACH_PLAYER_URL at spawn time, which needs the bound control port. Declared here (not
+// assigned until then) because the wss "connection" handler below closes over it; that handler
+// only runs once a browser connects, long after the spawn actually happens.
 let pty: ReturnType<typeof spawn>;
-try {
-  pty = spawn(agent, agentArgs, {
-    cwd: workspace,
-    name: "xterm-256color",
-    cols: process.stdout.columns || 80,
-    rows: process.stdout.rows || 24,
-    encoding: null, // raw bytes straight to process.stdout, no re-encoding round trip
-  });
-} catch (error) {
-  // The command exists (checked above), so a synchronous throw here is some other spawn failure.
-  fail(`could not start ${agent}: ${(error as Error).message}`);
-}
-
-// ADR 0016: the agent runs in the user's real terminal, like `script` — raw stdin in, pty
-// output straight to stdout. Tests pipe a non-TTY stdin; isTTY guards setRawMode for them.
-if (process.stdin.isTTY) process.stdin.setRawMode(true);
-process.stdin.on("data", (chunk) => pty.write(chunk));
-
-process.stdout.on("resize", () => pty.resize(process.stdout.columns || 80, process.stdout.rows || 24));
-
-pty.onData((chunk) => process.stdout.write(chunk as unknown as Buffer)); // encoding:null → Buffer, despite the string type
-
-pty.onExit(({ exitCode }) => {
-  if (process.stdin.isTTY) process.stdin.setRawMode(false);
-  process.exit(exitCode);
-});
 
 // ADR 0015: content server — serves ONLY public/, on its own origin, so a malicious lesson's
 // fetch() can't reach the rest of the workspace. Extension whitelist only — anything else 404s.
@@ -289,24 +268,48 @@ watch(publicDir, { recursive: true }, (_event, filename) => {
   }, 100);
 });
 
-// Print + auto-open only once both origins are actually live — the URL printed must be real.
-let controlPort = 0;
-let listening = 0;
-function announceWhenBothReady() {
-  if (++listening < 2) return;
+// ADR 0020: control binds first — the PTY child needs TEACH_PLAYER_URL (below) at spawn time,
+// which needs the port controlHttp actually got.
+controlHttp.listen(0, "127.0.0.1");
+await once(controlHttp, "listening");
+const controlPort = (controlHttp.address() as { port: number }).port;
+okOrigins = [undefined, `http://127.0.0.1:${controlPort}`, `http://localhost:${controlPort}`];
+okControlHosts = [`127.0.0.1:${controlPort}`, `localhost:${controlPort}`];
+
+try {
+  pty = spawn(agent, agentArgs, {
+    cwd: workspace,
+    name: "xterm-256color",
+    cols: process.stdout.columns || 80,
+    rows: process.stdout.rows || 24,
+    encoding: null, // raw bytes straight to process.stdout, no re-encoding round trip
+    // ADR 0020: lets the agent (and anything it runs) learn a player is live and which one.
+    env: { ...process.env, TEACH_PLAYER_URL: `http://127.0.0.1:${controlPort}` } as { [k: string]: string },
+  });
+} catch (error) {
+  // The command exists (checked above), so a synchronous throw here is some other spawn failure.
+  fail(`could not start ${agent}: ${(error as Error).message}`);
+}
+
+// ADR 0016: the agent runs in the user's real terminal, like `script` — raw stdin in, pty
+// output straight to stdout. Tests pipe a non-TTY stdin; isTTY guards setRawMode for them.
+if (process.stdin.isTTY) process.stdin.setRawMode(true);
+process.stdin.on("data", (chunk) => pty.write(chunk));
+
+process.stdout.on("resize", () => pty.resize(process.stdout.columns || 80, process.stdout.rows || 24));
+
+pty.onData((chunk) => process.stdout.write(chunk as unknown as Buffer)); // encoding:null → Buffer, despite the string type
+
+pty.onExit(({ exitCode }) => {
+  if (process.stdin.isTTY) process.stdin.setRawMode(false);
+  process.exit(exitCode);
+});
+
+// ADR 0020: content listens last — it carries no ordering requirement of its own, but the PTY
+// must exist before we announce a URL as "ready".
+contentHttp.listen(contentPort, "127.0.0.1", () => {
   const url = `http://127.0.0.1:${controlPort}`;
   console.log(`teach-player: ${agent} in ${workspace} — ${url}`);
   // ADR 0006: opening the browser is best-effort; headless and WSL boxes have no opener.
   spawnOpener(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore" }).on("error", () => {});
-}
-
-// ADR 0017: controlPort (needed for the content server's frame-ancestors header) is only known
-// once controlHttp reports its ephemeral port — so contentHttp starts listening from inside this
-// callback instead of in parallel. announceWhenBothReady still tolerates either order finishing first.
-controlHttp.listen(0, "127.0.0.1", () => {
-  controlPort = (controlHttp.address() as { port: number }).port;
-  okOrigins = [undefined, `http://127.0.0.1:${controlPort}`, `http://localhost:${controlPort}`];
-  okControlHosts = [`127.0.0.1:${controlPort}`, `localhost:${controlPort}`];
-  contentHttp.listen(contentPort, "127.0.0.1", announceWhenBothReady);
-  announceWhenBothReady();
 });

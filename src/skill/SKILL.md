@@ -1,11 +1,18 @@
 ---
 name: teach-player
-description: teach-player runs this workspace — lessons are self-contained HTML pages in public/, served live to the user's browser, where teachPlayer.send() prompts the terminal and teachPlayer.report() plus auto-capture append to .teach-player/journal.jsonl. Use when authoring or editing a lesson, when importing existing material in this workspace into lessons, and when answering what the user is doing or answered in the browser.
+description: teach-player runs this workspace — lessons are self-contained HTML pages in public/, where teachPlayer.send() prompts the terminal and teachPlayer.report() plus auto-capture append to .teach-player/journal.jsonl. Use when authoring or editing a lesson, when importing existing material in this workspace into lessons, and when answering what the user is doing or answered in the browser.
 ---
 
 # teach-player workspace
 
 You work in the terminal. The user reads lessons in a browser, served from this workspace by teach-player.
+
+## Is the player live?
+
+Run `printenv TEACH_PLAYER_URL`.
+
+- Non-empty: a player is live, and you are the agent attached to it. That URL is the page the user has open right now.
+- Empty: no player is attached to this session. The files are still valid lesson files. The journal is history, not the present. To get a browser, run `teach-player . <agent>`.
 
 ## Two zones
 
